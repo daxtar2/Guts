@@ -1,13 +1,15 @@
-package mitm
+package main
 
 import (
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/daxtar2/go-mitmproxy/proxy"
 	"log"
 )
 
-func Mitmproxy() {
+type Proxy struct{}
+
+func main() {
 	opts := &proxy.Options{
-		Addr:              ":7777",
+		Addr:              ":7070",
 		StreamLargeBodies: 1024 * 1024 * 5,
 	}
 	p, err := proxy.NewProxy(opts)
