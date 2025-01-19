@@ -1,7 +1,7 @@
 package main
 
 import (
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
 	"log"
 )
 

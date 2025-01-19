@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"sync"
 
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
 )
 

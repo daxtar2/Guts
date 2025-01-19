@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"net/url"
 
-	"github.com/lqqyt2423/go-mitmproxy/cert"
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/cert"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -19,7 +19,7 @@ type Options struct {
 	StreamLargeBodies int64 // 当请求或响应体大于此字节时，转为 stream 模式
 	SslInsecure       bool
 	CaRootPath        string
-	NewCaFunc         func() (cert.CA, error) //创建 Ca 的函数
+	NewCaFunc         func() (cert.CA, error) //创建 Ca 的函�?
 	Upstream          string
 }
 

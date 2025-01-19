@@ -2,13 +2,13 @@ package addon
 
 import (
 	"fmt"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/internal/helper"
 	"io/fs"
 	"os"
 	"path"
 	"strings"
 
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
 	log "github.com/sirupsen/logrus"
 )
 

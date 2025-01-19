@@ -9,8 +9,8 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/lqqyt2423/go-mitmproxy/cert"
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/cert"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/net/http2"
 )
@@ -64,7 +64,7 @@ func newAttacker(proxy *Proxy) (*attacker, error) {
 				},
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				// 禁止自动重定向
+				// 禁止自动重定�?
 				return http.ErrUseLastResponse
 			},
 		},
@@ -112,7 +112,7 @@ func (a *attacker) serveConn(clientTlsConn *tls.Conn, connCtx *ConnContext) {
 				DisableCompression: true,
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				// 禁止自动重定向
+				// 禁止自动重定�?
 				return http.ErrUseLastResponse
 			},
 		}
@@ -182,7 +182,7 @@ func (a *attacker) initHttpDialFn(req *http.Request) {
 				DisableCompression: true,  // To get the original response from the server, set Transport.DisableCompression to true.
 			},
 			CheckRedirect: func(req *http.Request, via []*http.Request) error {
-				// 禁止自动重定向
+				// 禁止自动重定�?
 				return http.ErrUseLastResponse
 			},
 		}
@@ -207,7 +207,7 @@ func (a *attacker) serverTlsHandshake(ctx context.Context, connCtx *ConnContext)
 		KeyLogWriter:       helper.GetTlsKeyLogWriter(),
 		ServerName:         clientHello.ServerName,
 		NextProtos:         clientHello.SupportedProtos,
-		// CurvePreferences:   clientHello.SupportedCurves, // todo: 如果打开会出错
+		// CurvePreferences:   clientHello.SupportedCurves, // todo: 如果打开会出�?
 		CipherSuites: clientHello.CipherSuites,
 	}
 	if len(clientHello.SupportedVersions) > 0 {
@@ -244,7 +244,7 @@ func (a *attacker) serverTlsHandshake(ctx context.Context, connCtx *ConnContext)
 			DisableCompression: true, // To get the original response from the server, set Transport.DisableCompression to true.
 		},
 		CheckRedirect: func(req *http.Request, via []*http.Request) error {
-			// 禁止自动重定向
+			// 禁止自动重定�?
 			return http.ErrUseLastResponse
 		},
 	}

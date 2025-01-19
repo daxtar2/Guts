@@ -1,4 +1,4 @@
-module Guts
+module github.com/daxtar2/Guts
 
 go 1.22
 
@@ -8,7 +8,6 @@ require (
 	github.com/andybalholm/brotli v1.0.4
 	github.com/golang/groupcache v0.0.0-20210331224755-41bb18bfe9da
 	github.com/klauspost/compress v1.17.11
-	github.com/lqqyt2423/go-mitmproxy v1.8.5
 	github.com/samber/lo v1.47.0
 	github.com/satori/go.uuid v1.2.0
 	github.com/sirupsen/logrus v1.8.1
@@ -25,3 +24,4 @@ require (
 	golang.org/x/sys v0.29.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 )
+

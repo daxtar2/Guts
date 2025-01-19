@@ -5,8 +5,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/lqqyt2423/go-mitmproxy/internal/helper"
-	"github.com/lqqyt2423/go-mitmproxy/proxy"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/internal/helper"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
 	"github.com/samber/lo"
 	log "github.com/sirupsen/logrus"
 	"github.com/tidwall/match"
