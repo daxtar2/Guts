@@ -13,3 +13,6 @@ require (
 	golang.org/x/sys v0.0.0-20220624220833-87e55d714810 // indirect
 )
 
+replace (
+	github.com/lqqyt2423/go-mitmproxy/ => ./pkg/mitm/go-mitmproxy
+)
