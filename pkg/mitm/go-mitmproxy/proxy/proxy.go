@@ -14,13 +14,13 @@ import (
 )
 
 type Options struct {
-	Debug             int
-	Addr              string
-	StreamLargeBodies int64 // 当请求或响应体大于此字节时，转为 stream 模式
-	SslInsecure       bool
-	CaRootPath        string
-	NewCaFunc         func() (cert.CA, error) //创建 Ca 的函�?
-	Upstream          string
+	Debug             int                     //debug mode: 1 - print debug log, 2 - show debug from
+	Addr              string                  //proxy listen addr
+	StreamLargeBodies int64                   // 当请求或响应体大于此字节时，转为 stream 模式
+	SslInsecure       bool                    //not verify upstream server SSL/TLS certificates.
+	CaRootPath        string                  // rootpath of ca
+	NewCaFunc         func() (cert.CA, error) //create Ca
+	Upstream          string                  //upstream proxy
 }
 
 type Proxy struct {
