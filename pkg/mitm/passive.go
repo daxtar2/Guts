@@ -3,6 +3,7 @@ package main
 import (
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
+	"github.com/daxtar2/Guts/pkg/util"
 	"github.com/thoas/go-funk"
 	"path/filepath"
 )
@@ -16,12 +17,12 @@ func isDomainAllowed(f *proxy.Flow) bool {
 	cfg := config.GConfig.Mitmproxy
 
 	if len(cfg.IncludeDomain) > 0 && !(len(cfg.IncludeDomain) == 1 && cfg.IncludeDomain[0] == "") { // if blacklist not
-		if util.Regexp(cfg.IncludeDomain, host) {
+		if util.JudgeHostByRegex(cfg.IncludeDomain, host) {
 			return true // traffic allowed
 		}
 	} else {
 		if len(cfg.ExcludeDomain) > 0 && !(len(cfg.ExcludeDomain) == 1 && cfg.ExcludeDomain[0] == "") {
-			if util.Regexp(cfg.ExcludeDomain, host) {
+			if util.JudgeHostByRegex(cfg.ExcludeDomain, host) {
 				return false
 			}
 		} else {

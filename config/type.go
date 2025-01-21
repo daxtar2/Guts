@@ -2,6 +2,7 @@ package config
 
 type Config struct {
 	Mitmproxy Mitmproxy `json:"mitmproxy"`
+	HeaderMap HeaderMap `json:"headermap"`
 }
 
 type Mitmproxy struct {
@@ -10,6 +11,11 @@ type Mitmproxy struct {
 	IncludeDomain []string `json:"include_domain"`
 	ExcludeDomain []string `json:"exclude_domain"`
 	FilterSufffix []string `json:"filter_sufffix"`
+}
+
+type HeaderMap struct {
+	Headers   map[string]string `json:"headers"`
+	SetCookie []string          `json:"set_cookie"`
 }
 
 type CaConfig struct {
