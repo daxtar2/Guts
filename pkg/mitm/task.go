@@ -17,22 +17,36 @@ func distrib(f *proxy.Flow) {
 		host = parseUrl.Host
 	}
 
-	headerMap := config.GConfig.HeaderMap {
-		Headers: make(map[string]string,len(f.Request.Header)),
-		SetCookie: nil,
-	}
+	//headerMap := config.GConfig.HeaderMap
+	//{
+	//	Headers: make(map[string]string,len(f.Request.Header)),
+	//	SetCookie: nil
+	//}
 
+	var body []byte
+	body ,err := f.Response.DecodedBody()
+	if err != nil { body = f.Response.Body}
+
+	headerMap := make(map[string]string)
 	for key,value := range f.Request.Header {
 		if key == "Set-Cookie" {
-			headerMap.SetCookie = append(headerMap.SetCookie, value...)
+			headerMap[key] = strings.Join(value, ";")
 		}else {
-			headerMap.Headers[key] = strings.Join(value, ",")
+			headerMap[key] = strings.Join(value, ",")
 		}
 	}
 
 	re := &header.PassiveResult{
 		Url: parseUrl.String(),
+		ParseUrl: parseUrl,
 		Host: host,
+		//status
+		Method: f.Request.Method,
+		Headers: headerMap,
+		RequestBody: string(f.Request.Body),
+		ContentType: f.Request.Header.Get("Content-Type"),
+		RawRequest:
+
 	}
 
 	t.Wg.Add(1)
