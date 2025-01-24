@@ -60,7 +60,7 @@ func RespToString(f *proxy.Flow) string {
 		return ""
 	}
 
-	buf := new(bytes.Buffer) // 避免 make([]byte, 0)
+	buf := new(bytes.Buffer) // 避免多余的内存空间占用
 
 	// 拼接状态行
 	fmt.Fprintf(buf, "%s %d %s\r\n", f.Request.Proto, f.Response.StatusCode, http.StatusText(f.Response.StatusCode))

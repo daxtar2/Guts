@@ -36,7 +36,7 @@ func distrib(f *proxy.Flow) {
 		}
 	}
 
-	re := &header.PassiveResult{
+	scanInput := &header.PassiveResult{
 		Url: parseUrl.String(),
 		ParseUrl: parseUrl,
 		Host: host,
@@ -45,14 +45,14 @@ func distrib(f *proxy.Flow) {
 		Headers: headerMap,
 		RequestBody: string(f.Request.Body),
 		ContentType: f.Request.Header.Get("Content-Type"),
-		RawRequest:
-
+		RawRequest: ReqToString(f.Request),
+		RawResponse: RespToString(f),
 	}
 
 	t.Wg.Add(1)
 	go func(data *header.PassiveResult) {
 		defer t.Wg.Done()
-		if err := t.Pool.Submit(t.)
+		if err := t.Pool.Submit(t.ScanBegin(scanInput))
 	}
 
 }

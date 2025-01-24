@@ -12,6 +12,7 @@ type InfoAddon struct {
 	proxy.BaseAddon
 }
 
+// 判断域名黑白名单
 func isDomainAllowed(f *proxy.Flow) bool {
 	host := f.Request.URL.Host
 	cfg := config.GConfig.Mitmproxy
@@ -29,8 +30,10 @@ func isDomainAllowed(f *proxy.Flow) bool {
 			return true
 		}
 	}
+	return false
 }
 
+// 从后缀判断文件类型
 func isSuffixAllowed(f *proxy.Flow) bool {
 	ext := filepath.Ext(f.Request.URL.Path)
 	return ext == "" || !funk.Contains(config.GConfig.Mitmproxy.FilterSufffix, ext)
@@ -39,8 +42,8 @@ func isSuffixAllowed(f *proxy.Flow) bool {
 func (IA *InfoAddon) Response(trafficF *proxy.Flow) {
 	if trafficF.Request.Method == "CONNECT" {
 		return
-	} //skip CONNECT request
+	}                                                           //skip CONNECT request
 	if isDomainAllowed(trafficF) && isSuffixAllowed(trafficF) { // total white host
-		distribution(trafficF)
+		distrib(trafficF)
 	}
 }

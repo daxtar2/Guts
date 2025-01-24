@@ -3,11 +3,11 @@ package main
 import (
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
-	"github.com/daxtar2/Guts/pkg/task"
+	"github.com/daxtar2/Guts/pkg/scan"
 	"log"
 )
 
-var t *task.Task
+var t *scan.Task
 
 func NewMitmproxy() {
 	opts := &proxy.Options{
