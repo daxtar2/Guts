@@ -42,7 +42,7 @@ func isSuffixAllowed(f *proxy.Flow) bool {
 func (IA *InfoAddon) Response(trafficF *proxy.Flow) {
 	if trafficF.Request.Method == "CONNECT" {
 		return
-	}                                                           //skip CONNECT request
+	} //skip CONNECT request
 	if isDomainAllowed(trafficF) && isSuffixAllowed(trafficF) { // total white host
 		distrib(trafficF)
 	}
