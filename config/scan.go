@@ -17,6 +17,28 @@ var TemplateFilters = nuclei.TemplateFilters{
 	TemplateCondition: []string{"status_code == 200"},
 }
 
+var LoaderConfig = LoaderConfig{
+	Templates:    []string{"nuclei-templates", "custom-templates"},
+	TemplateURLs: []string{"https://github.com/projectdiscovery/nuclei-templates"},
+	Workflows:    []string{"workflows/fingerprint-scan.yaml"},
+	WorkflowURLs: []string{"https://github.com/projectdiscovery/nuclei-workflows"},
+}
+
+// 加载模板和工作流的配置
+// type LoaderConfig struct {
+// 	Templates []string
+// 	TemplateURLs []string
+// 	Workflows []string
+// 	WorkflowURLs []string
+// 	ExcludeTemplates []string
+// 	IncludeTemplates []string
+// 	RemoteTemplateDomainList []string
+// }
+
 func GetTemplateFilters() nuclei.TemplateFilters {
 	return TemplateFilters
+}
+
+func GetLoaderConfig() LoaderConfig {
+	return LoaderConfig
 }
