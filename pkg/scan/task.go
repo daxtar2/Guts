@@ -5,6 +5,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/daxtar2/Guts/pkg/config"
 	"github.com/daxtar2/Guts/pkg/header"
 	"github.com/panjf2000/ants/v2"
 	nuclei "github.com/projectdiscovery/nuclei/v3/lib"
@@ -25,8 +26,6 @@ func NewTask(poolSize int) (*Task, error) {
 	options := []nuclei.NucleiSDKOptions{
 		nuclei.WithTemplateFilters(nuclei.TemplateFilters{}),
 		nuclei.EnableStatsWithOpts(nuclei.StatsOptions{MetricServerPort: 8080}),
-		// 修正模板路径设置
-		nuclei.WithTemplatesPath("nuclei-templates", "custom-templates"), // 可以指定多个模板目录
 		nuclei.WithGlobalRateLimit(1, time.Second),
 		nuclei.WithConcurrency(nuclei.Concurrency{
 			TemplateConcurrency:           1,
@@ -43,7 +42,7 @@ func NewTask(poolSize int) (*Task, error) {
 	if err != nil {
 		return nil, fmt.Errorf("创建nuclei引擎失败: %v", err)
 	}
-
+	engine.SetTemplateConfig(config.GetLoaderConfig())
 	// 创建工作池
 	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
 	if err != nil {
@@ -66,17 +65,17 @@ func (t *Task) ExecuteFingerprint(target []string) (map[string][]string, error) 
 	// 存储识别结果
 	techStack := make(map[string][]string)
 
-	// 加载指纹识别工作流
-	workflow := []string{"workflows/fingerprint-scan.yaml"}
+	// 从配置文件获取工作流
+	workflows := config.GetLoaderConfig().Workflows
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	t.engine.LoadTargets(target, false)
-	t.engine.LoadWorkflows(workflow)
+	t.engine.LoadWorkflows(workflows)
 
 	err := t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
-		if result != nil {
+		if result != nil && result.Info != nil {
 			techStack[result.Host] = append(techStack[result.Host], result.Info.Name)
 		}
 	})
@@ -103,19 +102,23 @@ func (t *Task) ScanPassiveResult(result *header.PassiveResult) error {
 
 	// 设置与识别到的技术相关的模板
 	if techs, exists := techStack[result.Host]; exists {
-		// 这里可以根据识别到的技术选择相应的模板
-		t.engine.GetExecuterOptions().Options.Templates = getTemplatesForTech(techs)
+		templatePaths := getTemplatesForTech(techs)
+		if len(templatePaths) > 0 {
+			// 设置模板路径
+			t.engine.SetTemplateConfig(templatePaths)
+		}
 	}
 
 	// 执行漏洞扫描
 	err = t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
-		if result != nil {
+		if result != nil && result.Info != nil {
 			t.Wg.Add(1)
 			_ = t.Pool.Submit(func() {
 				defer t.Wg.Done()
-				// output [+] example.com: CVE-2023-1234
-				// output [+] example.com: CVE-2023-1234
-				fmt.Printf("[+] %s: %s\n", result.Host, result.Info.Name)
+				fmt.Printf("[+] %s [%s] %s\n",
+					result.Host,
+					result.Info.SeverityHolder.Severity.String(),
+					result.Info.Name)
 			})
 		}
 	})
