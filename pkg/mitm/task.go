@@ -3,41 +3,40 @@ package main
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/daxtar2/Guts/pkg/header"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
+	"github.com/daxtar2/Guts/pkg/scan"
 )
 
-var host string
+var (
+	scanTask *scan.Task
+	// 用于去重的map
+	scannedHosts sync.Map
+)
+
+func init() {
+	// 初始化扫描任务
+	var err error
+	scanTask, err = scan.NewTask(10) // 设置合适的并发数
+	if err != nil {
+		panic(fmt.Sprintf("初始化扫描任务失败: %v", err))
+	}
+}
 
 func distrib(f *proxy.Flow) {
 	parseUrl := f.Request.URL
 
-	//避免端口干扰
-	port := parseUrl.Port()
-	if port == "" && (port == "80" || port == "443") {
-		host = parseUrl.Hostname()
-	} else {
-		host = parseUrl.Host
+	// 处理域名
+	host := parseUrl.Hostname()
+
+	// 检查是否已经扫描过该域名
+	if _, exists := scannedHosts.LoadOrStore(host, true); exists {
+		return // 如果已经扫描过，直接返回
 	}
 
-	//headerMap := config.GConfig.HeaderMap
-	//{
-	//	Headers: make(map[string]string,len(f.Request.Header)),
-	//	SetCookie: nil
-	//}
-
-	var body []byte
-	var err error
-	if f.Response != nil {
-		body, err = f.Response.DecodedBody()
-		if err != nil {
-			// 记录解码错误但继续处理
-			fmt.Printf("Failed to decode response body: %v\n", err)
-			body = f.Response.Body
-		}
-	}
-
+	// 构建请求头映射
 	headerMap := make(map[string]string)
 	for key, value := range f.Request.Header {
 		if key == "Set-Cookie" {
@@ -47,30 +46,36 @@ func distrib(f *proxy.Flow) {
 		}
 	}
 
-	scanInput := &header.PassiveResult{
-		Url:      parseUrl.String(),
-		ParseUrl: parseUrl,
-		Host:     host,
-		//status
-		Method:       f.Request.Method,
-		Headers:      headerMap,
-		RequestBody:  string(f.Request.Body),
-		ContentType:  f.Request.Header.Get("Content-Type"),
-		RawRequest:   ReqToString(f.Request),
-		RawResponse:  RespToString(f),
-		ResponseBody: string(body), // 添加响应体
+	// 获取响应体
+	var body []byte
+	var err error
+	if f.Response != nil {
+		body, err = f.Response.DecodedBody()
+		if err != nil {
+			fmt.Printf("Failed to decode response body: %v\n", err)
+			body = f.Response.Body
+		}
 	}
 
-	PrintInfo(scanInput)
+	// 构建扫描输入
+	scanInput := &header.PassiveResult{
+		Url:         parseUrl.String(),
+		ParseUrl:    parseUrl,
+		Host:        host,
+		Method:      f.Request.Method,
+		Headers:     headerMap,
+		RequestBody: string(f.Request.Body),
+		ContentType: f.Request.Header.Get("Content-Type"),
+		RawRequest:  ReqToString(f.Request),
+		RawResponse: RespToString(f),
+	}
 
-	// t.Wg.Add(1)
-	// go func(data *header.PassiveResult) {
-	// 	defer t.Wg.Done()
-	// 	if err := t.Pool.Submit(t.ScanBegin(scanInput)); err != nil {
-	// 		panic(err)
-	// 	}
-	// }(scanInput)
-
+	// 异步执行扫描
+	go func(input *header.PassiveResult) {
+		if err := scanTask.ScanPassiveResult(input); err != nil {
+			fmt.Printf("域名扫描失败 [%s]: %v\n", input.Host, err)
+		}
+	}(scanInput)
 }
 
 func PrintInfo(scanInput *header.PassiveResult) {

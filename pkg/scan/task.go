@@ -5,13 +5,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/header"
 	"github.com/panjf2000/ants/v2"
 	nuclei "github.com/projectdiscovery/nuclei/v3/lib"
 	"github.com/projectdiscovery/nuclei/v3/pkg/output"
-	"github.com/projectdiscovery/nuclei/v3/pkg/protocols/common/contextargs"
-	"github.com/projectdiscovery/nuclei/v3/pkg/types"
 	"golang.org/x/net/context"
 )
 
@@ -19,145 +16,129 @@ type Task struct {
 	MaxPoolsize int // 最大并发数
 	Pool        *ants.Pool
 	Wg          *sync.WaitGroup
-	engine      *types.Engine
+	engine      *nuclei.NucleiEngine
 	results     chan *output.ResultEvent
 }
 
 // 初始化扫描任务
 func NewTask(poolSize int) (*Task, error) {
-	options := &types.Options{
-		Templates:       []string{"templates"},
-		TemplateThreads: poolSize,
-		Silent:          true,
-		NoInteractsh:    true,
-		// 针对被动扫描的优化配置
-		RateLimit: 100,
-		BulkSize:  50,
-		Timeout:   5,
+	options := []nuclei.NucleiSDKOptions{
+		nuclei.WithTemplateFilters(nuclei.TemplateFilters{}),
+		nuclei.EnableStatsWithOpts(nuclei.StatsOptions{MetricServerPort: 8080}),
+		// 修正模板路径设置
+		nuclei.WithTemplatesPath("nuclei-templates", "custom-templates"), // 可以指定多个模板目录
+		nuclei.WithGlobalRateLimit(1, time.Second),
+		nuclei.WithConcurrency(nuclei.Concurrency{
+			TemplateConcurrency:           1,
+			HostConcurrency:               1,
+			HeadlessHostConcurrency:       1,
+			HeadlessTemplateConcurrency:   1,
+			JavascriptTemplateConcurrency: 1,
+			TemplatePayloadConcurrency:    1,
+			ProbeConcurrency:              1,
+		}),
 	}
 
-	engine, err := types.NewEngine(options)
+	engine, err := nuclei.NewNucleiEngineCtx(context.Background(), options...)
 	if err != nil {
 		return nil, fmt.Errorf("创建nuclei引擎失败: %v", err)
 	}
 
-	return &Task{
+	// 创建工作池
+	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
+	if err != nil {
+		return nil, fmt.Errorf("创建工作池失败: %v", err)
+	}
+
+	t := &Task{
 		MaxPoolsize: poolSize,
+		Pool:        pool,
 		engine:      engine,
 		results:     make(chan *output.ResultEvent, 100),
-	}, nil
+		Wg:          &sync.WaitGroup{},
+	}
+
+	return t, nil
 }
 
-func (t Task) ScanBegin() {
-	// 设置合理的超时时间，基于任务量动态计算
-	timeout := time.Duration(t.MaxPoolsize*30) * time.Second // 每个任务预留30秒
-	ctx, cancel := context.WithTimeout(context.Background(), timeout)
-	defer cancel() // 防止内存泄漏
+// 新增方法：执行技术识别工作流
+func (t *Task) ExecuteFingerprint(target []string) (map[string][]string, error) {
+	// 存储识别结果
+	techStack := make(map[string][]string)
 
-	// 配置 Nuclei 引擎选项
-	options := []nuclei.Option{
-		nuclei.WithTemplateFilters(config.GetTemplateFilters()),
-		nuclei.WithTemplatesDirectory("templates"), // 指定模板目录
-		nuclei.WithRate(t.MaxPoolsize),             // 设置扫描速率
-		nuclei.WithHeadless(false),                 // 是否启用Headless模式
-		nuclei.WithVerbose(false),                  // 详细日志输出
-	}
+	// 加载指纹识别工作流
+	workflow := []string{"workflows/fingerprint-scan.yaml"}
 
-	ne, err := nuclei.NewNucleiEngineCtx(ctx, options...)
-	if err != nil {
-		fmt.Printf("初始化Nuclei引擎失败: %v\n", err)
-		return
-	}
-	defer ne.Close()
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	// 使用WaitGroup跟踪扫描任务
-	var wg sync.WaitGroup
-	wg.Add(1)
+	t.engine.LoadTargets(target, false)
+	t.engine.LoadWorkflows(workflow)
 
-	// 创建结果通道
-	resultChan := make(chan *output.ResultEvent, 100)
-	errorChan := make(chan error, 100)
-
-	// 启动结果处理协程
-	go func() {
-		defer wg.Done()
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case result := <-resultChan:
-				if result == nil {
-					return
-				}
-				// 根据漏洞严重程度进行不同处理
-				switch result.Info.SeverityHolder.Severity {
-				case "critical", "high":
-					fmt.Printf("【严重漏洞】%s: %s\n", result.Host, result.Info.Name)
-				case "medium":
-					fmt.Printf("【中危漏洞】%s: %s\n", result.Host, result.Info.Name)
-				default:
-					fmt.Printf("【低危漏洞】%s: %s\n", result.Host, result.Info.Name)
-				}
-
-				// TODO: 这里可以添加漏洞结果持久化逻辑
-			case err := <-errorChan:
-				if err != nil {
-					fmt.Printf("扫描过程出错: %v\n", err)
-				}
-			}
-		}
-	}()
-
-	// 执行扫描
-	err = ne.ExecuteCallbackWithCtx(ctx, func(event *output.ResultEvent) {
-		select {
-		case resultChan <- event:
-		default:
-			// 通道已满时的处理
-			fmt.Println("警告：结果通道已满，部分结果可能丢失")
+	err := t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
+		if result != nil {
+			techStack[result.Host] = append(techStack[result.Host], result.Info.Name)
 		}
 	})
 
-	if err != nil {
-		errorChan <- fmt.Errorf("执行扫描失败: %v", err)
-	}
-
-	// 关闭通道
-	close(resultChan)
-	close(errorChan)
-
-	// 等待所有处理完成
-	wg.Wait()
+	return techStack, err
 }
 
-// 处理被动扫描结果
+// 修改后的扫描方法
 func (t *Task) ScanPassiveResult(result *header.PassiveResult) error {
-	// 构建扫描目标
-	target := &contextargs.MetaInput{
-		Input: result.Url,
-		Raw:   []byte(result.RawRequest),
-		Meta:  make(map[string]interface{}),
+	target := []string{result.Host}
+
+	// 1. 首先执行指纹识别
+	techStack, err := t.ExecuteFingerprint(target)
+	if err != nil {
+		return fmt.Errorf("fingerprint scan error: %v", err)
 	}
 
-	// 添加原始请求响应信息
-	target.Meta["original_request"] = result.RawRequest
-	target.Meta["original_response"] = result.RawResponse
-	target.Meta["headers"] = result.Headers
+	// 2. 基于识别结果选择相应的模板
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
 
-	// 执行扫描
-	err := t.engine.ExecuteWithResults(target, func(result *output.ResultEvent) {
-		// 实时处理扫描结果
+	// 重新加载目标
+	t.engine.LoadTargets(target, false)
+
+	// 设置与识别到的技术相关的模板
+	if techs, exists := techStack[result.Host]; exists {
+		// 这里可以根据识别到的技术选择相应的模板
+		t.engine.GetExecuterOptions().Options.Templates = getTemplatesForTech(techs)
+	}
+
+	// 执行漏洞扫描
+	err = t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
 		if result != nil {
-			switch result.Info.SeverityHolder.Severity {
-			case types.High, types.Critical:
-				fmt.Printf("【严重漏洞】%s: %s\n", result.Host, result.Info.Name)
-			case types.Medium:
-				fmt.Printf("【中危漏洞】%s: %s\n", result.Host, result.Info.Name)
-			default:
-				fmt.Printf("【低危漏洞】%s: %s\n", result.Host, result.Info.Name)
-			}
+			t.Wg.Add(1)
+			_ = t.Pool.Submit(func() {
+				defer t.Wg.Done()
+				// output [+] example.com: CVE-2023-1234
+				// output [+] example.com: CVE-2023-1234
+				fmt.Printf("[+] %s: %s\n", result.Host, result.Info.Name)
+			})
 		}
 	})
 
 	return err
+}
+
+// 辅助函数：根据技术选择模板
+func getTemplatesForTech(techs []string) []string {
+	templates := []string{}
+	for _, tech := range techs {
+		switch tech {
+		case "wordpress":
+			templates = append(templates, "templates/vulnerabilities/wordpress/")
+		case "apache":
+			templates = append(templates, "templates/vulnerabilities/apache/")
+			// 添加更多技术对应的模板
+		}
+	}
+	return templates
+}
+
+// 添加关闭方法
+func (t *Task) Close() {
+	t.Pool.Release() // 释放工作池资源
 }
