@@ -12,6 +12,9 @@ import (
 )
 
 // 当前仅做了转�?websocket 流量
+type webSocket struct{}
+
+var defaultWebSocket webSocket
 
 // WebsocketConn 处理WebSocket连接
 type WebsocketConn struct {
