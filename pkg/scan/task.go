@@ -2,10 +2,10 @@ package scan
 
 import (
 	"fmt"
-	"github.com/projectdiscovery/nuclei/v3/pkg/catalog/loader"
-	"github.com/projectdiscovery/nuclei/v3/pkg/templates"
 	"sync"
 	"time"
+
+	"github.com/projectdiscovery/nuclei/v3/pkg/catalog/loader"
 
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/cache"
@@ -83,108 +83,69 @@ func NewTask(poolSize int) (*Task, error) {
 		useRedis:      useRedis,
 	}
 
-	// 预加载常用模板到Redis
-	if t.useRedis {
-		go t.preloadTemplates()
-	}
-
 	return t, nil
 }
 
-// - **异步预加载**：通过启用 goroutines，逐个异步写入模板，并且记录 Redis 的写入错误数。
-// - **TTL 动态配置**：允许用户传入动态 TTL 参数，便于根据任务频率调整缓存时长。
-func (t *Task) preloadTemplates() {
-	templatesTmp := t.engine.GetTemplates()
-	errorCount := 0
-	var wg sync.WaitGroup
-
-	for _, tmpl := range templatesTmp {
-		wg.Add(1)
-		go func(tmpl *templates.Template) {
-			defer wg.Done()
-			key := "template:" + tmpl.ID
-			if err := t.templateCache.SetTemplate(key, tmpl); err != nil {
-				errorCount++
-				gologger.Warning().Msgf("[Redis Preload Error] Key: %s, Error: %v", key, err)
-			}
-		}(tmpl)
-	}
-
-	wg.Wait()
-	if errorCount > 0 {
-		gologger.Warning().Msgf("Redis模板加载完成，但 %d 个模板加载失败", errorCount)
-	}
-}
-
-// 新增方法：执行技术识别工作流
-// 增加错误日志和配置化超时时间
-func (t *Task) ExecuteFingerprint(target []string, timeout time.Duration) (map[string][]string, error) {
-	techStack := make(map[string][]string)
-
-	ctx, cancel := context.WithTimeout(context.Background(), timeout) // timeout 参数化
-	defer cancel()
-
-	err := t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
-		if result != nil && result.Info.Name != "" {
-			gologger.Debug().Msgf("[Fingerprint] Host: %s, Tech: %s", result.Host, result.Info.Name)
-			techStack[result.Host] = append(techStack[result.Host], result.Info.Name)
-		}
-	})
-
-	if err != nil {
-		gologger.Error().Msgf("[Fingerprint Error] target: %v, error: %v", target, err)
-	}
-
-	return techStack, err
-}
-
 // 修改后的扫描方法
-func (t *Task) ScanPassiveResult(result *header.PassiveResult) error {
+func (t *Task) ScanPassiveResult(result *header.PassiveResult, workflowsList []string) error {
 	start := time.Now() // 记录任务开始时间
-	techTemplates, err := t.templateCache.MGetTemplates(getTechTemplateKeys(result.TechStack))
-	if err != nil {
-		gologger.Warning().Msgf("Redis加载模板失败，切换到默认加载方式: %v", err)
-		return t.scanWithDefaultLoader(result)
-	}
-
-	store := t.engine.Store()
-	selectedTemplates := []*templates.Template{}
-	for _, tmpl := range store.Templates() {
-		for _, techTemplate := range techTemplates {
-			if tmpl.Path == techTemplate.Path {
-				selectedTemplates = append(selectedTemplates, tmpl)
-			}
-		}
-	}
-	if len(selectedTemplates) == 0 {
-		return fmt.Errorf("未找到匹配的模板")
-	}
-	// 1. 从Redis获取技术栈对应的模板
-	//gologger.Info().Msgf("[Redis] 模板加载成功, Count: %d", len(techTemplates))
 	target := []string{result.Host}
 	t.engine.LoadTargets(target, false)
 
-	// 1. 首先执行指纹识别
-	techStack, err := t.ExecuteFingerprint(target, 30*time.Second)
-	if err != nil {
-		return fmt.Errorf("fingerprint scan error: %v", err)
+	workflows := t.engine.Store().LoadWorkflows(workflowsList)
+	if len(workflows) == 0 {
+		return fmt.Errorf("未找到任何有效的workflows，请检查路径")
 	}
 
-	// 基于识别技术选择模板
-	selectedTemplates := getTemplatesForTech(techStack[result.Host])
-	if len(selectedTemplates) > 0 {
-		t.engine.SetTemplateConfig(selectedTemplates)
-	}
-
-	// 2. 基于识别结果选择相应的模板
+	workflowHit := false //命中指纹
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	// 重新加载目标
+	// 执行漏洞扫描
+	err := t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
+		if result != nil && result.Info.Name != "" {
+			t.Wg.Add(1)
+			workflowHit = true
+			_ = t.Pool.Submit(func() {
+				defer t.Wg.Done()
+				fmt.Printf("[+] %s [%s] %s\n",
+					result.Host,
+					result.Info.SeverityHolder.Severity.String(),
+					result.Info.Name)
+			})
+		}
+	})
+	if err != nil {
+		return fmt.Errorf("工作流执行出错: %v", err)
+	}
+
+	if !workflowHit {
+		gologger.Info().Msg("[未命中任何 Workflow，通过 Redis 动态加载模板并重新扫描]")
+		if err := t.scanWithTemplatesLoader(result); err != nil {
+			gologger.Warning().Msgf("Redis模板扫描失败: %v", err)
+		}
+	}
+	gologger.Info().Msgf("[扫描完成] Host: %s, 耗时: %s", result.Host, time.Since(start))
+	return nil
+}
+
+func (t *Task) scanWithTemplatesLoader(result *header.PassiveResult) error {
+	// 从Redis加载相关技术栈的模板
+	techTemplates := t.RedisLoader(result)
+	if len(techTemplates) == 0 {
+		gologger.Info().Msgf("未从Redis中找到相关技术栈的模板: %v", result.Host)
+		return nil
+	}
+
+	// 设置扫描目标
+	target := []string{result.Host}
 	t.engine.LoadTargets(target, false)
 
-	// 执行漏洞扫描
-	err = t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
+	// 使用加载的模板执行扫描
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	err := t.engine.ExecuteCallbackWithCtx(ctx, func(result *output.ResultEvent) {
 		if result != nil && result.Info.Name != "" {
 			t.Wg.Add(1)
 			_ = t.Pool.Submit(func() {
@@ -196,43 +157,10 @@ func (t *Task) ScanPassiveResult(result *header.PassiveResult) error {
 			})
 		}
 	})
-	gologger.Info().Msgf("[扫描完成] Host: %s, 耗时: %s", result.Host, time.Since(start))
-	return err
-}
 
-// getTechTemplateKeys 根据技术栈生成 Redis 模板键名
-func getTechTemplateKeys(techStack map[string][]string) []string {
-	keys := make([]string, 0) // 初始化空的键列表
-
-	// 遍历每个主机以及对应的技术栈
-	for _, techs := range techStack {
-		for _, tech := range techs {
-			// 将主机的技术栈元素转换为 Redis 键，例如 "template:wordpress"
-			key := fmt.Sprintf("template:%s", tech)
-			keys = append(keys, key)
-		}
+	if err != nil {
+		return fmt.Errorf("模板扫描执行出错: %v", err)
 	}
-	return keys // 返回拼接好的 Redis 键名列表
-}
 
-func (t *Task) scanWithDefaultLoader(result *header.Passi)
-
-// 辅助函数：根据技术选择模板
-func getTemplatesForTech(techs []string) []string {
-	templates := []string{}
-	for _, tech := range techs {
-		switch tech {
-		case "wordpress":
-			templates = append(templates, "templates/vulnerabilities/wordpress/")
-		case "apache":
-			templates = append(templates, "templates/vulnerabilities/apache/")
-			// 添加更多技术对应的模板
-		}
-	}
-	return templates
-}
-
-// 添加关闭方法
-func (t *Task) Close() {
-	t.Pool.Release() // 释放工作池资源
+	return nil
 }
