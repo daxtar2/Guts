@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/daxtar2/Guts/config"
 	"strings"
 	"sync"
 
@@ -11,21 +12,27 @@ import (
 )
 
 var (
-	scanTask *scan.Task
 	// 用于去重的map
-	scannedHosts sync.Map
+	scannedHosts = sync.Map{} //域名去重
 )
 
-func init() {
-	// 初始化扫描任务
-	var err error
-	scanTask, err = scan.NewTask(10) // 设置合适的并发数
+func main() {
+	task, err := scan.NewTask(10)
 	if err != nil {
-		panic(fmt.Sprintf("初始化扫描任务失败: %v", err))
+		println(err)
 	}
+
+	mitmproxy := NewMitmproxy()
+	infoAddon := NewInfoAddon(config.GConfig, task, config.GConfig.Mitmproxy.FilterSufffix) //实例化addon
+	mitmproxy.AddAddon(infoAddon)                                                           //添加addon
+
+	if err := mitmproxy.Start(); err != nil {
+		print(err)
+	}
+
 }
 
-func distrib(f *proxy.Flow) {
+func distrib(f *proxy.Flow, taskIndistrib *scan.Task) {
 	parseUrl := f.Request.URL
 
 	// 处理域名
@@ -46,16 +53,13 @@ func distrib(f *proxy.Flow) {
 		}
 	}
 
-	// 获取响应体
-	var body []byte
-	var err error
-	if f.Response != nil {
-		body, err = f.Response.DecodedBody()
-		if err != nil {
-			fmt.Printf("Failed to decode response body: %v\n", err)
-			body = f.Response.Body
-		}
-	}
+	//// 获取响应体
+	//if f.Response != nil {
+	//	_, err := f.Response.DecodedBody()
+	//	if err != nil {
+	//		fmt.Printf("Failed to decode response body: %v\n", err)
+	//	}
+	//}
 
 	// 构建扫描输入
 	scanInput := &header.PassiveResult{
@@ -72,7 +76,7 @@ func distrib(f *proxy.Flow) {
 
 	// 异步执行扫描
 	go func(input *header.PassiveResult) {
-		if err := scanTask.ScanPassiveResult(input); err != nil {
+		if err := taskIndistrib.ScanPassiveResult(input); err != nil {
 			fmt.Printf("域名扫描失败 [%s]: %v\n", input.Host, err)
 		}
 	}(scanInput)

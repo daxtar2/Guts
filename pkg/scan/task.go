@@ -87,12 +87,12 @@ func NewTask(poolSize int) (*Task, error) {
 }
 
 // 修改后的扫描方法
-func (t *Task) ScanPassiveResult(result *header.PassiveResult, workflowsList []string) error {
+func (t *Task) ScanPassiveResult(result *header.PassiveResult) error {
 	start := time.Now() // 记录任务开始时间
 	target := []string{result.Host}
 	t.engine.LoadTargets(target, false)
 
-	workflows := t.engine.Store().LoadWorkflows(workflowsList)
+	workflows := t.engine.Store().LoadWorkflows(config.GetLoaderConfig().WorkflowURLs) //这里workflowsList
 	if len(workflows) == 0 {
 		return fmt.Errorf("未找到任何有效的workflows，请检查路径")
 	}

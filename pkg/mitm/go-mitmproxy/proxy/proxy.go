@@ -4,13 +4,12 @@ import (
 	"context"
 	"crypto/tls"
 	"crypto/x509"
-	"net"
-	"net/http"
-	"net/url"
-
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/cert"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/internal/helper"
 	log "github.com/sirupsen/logrus"
+	"net"
+	"net/http"
+	"net/url"
 )
 
 type Options struct {

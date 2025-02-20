@@ -9,7 +9,7 @@ import (
 
 var t *scan.Task
 
-func NewMitmproxy() {
+func NewMitmproxy() *proxy.Proxy {
 	opts := &proxy.Options{
 		Debug:             0,
 		Addr:              config.GConfig.Mitmproxy.AddrPort,
@@ -20,13 +20,5 @@ func NewMitmproxy() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	p.AddAddon(&InfoAddon{})
-	go func() {
-		err := p.Start()
-		if err != nil {
-			log.Fatal(err)
-		}
-	}()
-	t.Wg.Wait()
-
+	return p
 }

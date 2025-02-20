@@ -3,47 +3,65 @@ package main
 import (
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
+	"github.com/daxtar2/Guts/pkg/scan"
 	"github.com/daxtar2/Guts/pkg/util"
-	"github.com/thoas/go-funk"
 	"path/filepath"
+	"sync"
 )
 
 type InfoAddon struct {
 	proxy.BaseAddon
+	cfg           *config.Config
+	scanTask      *scan.Task
+	domainCache   sync.Map        //缓存域名白名单的检查结果
+	excludeSuffix map[string]bool //待过滤的后缀哈希表
+}
+
+func NewInfoAddon(cfg *config.Config, scanTask *scan.Task, excludeSuffix []string) *InfoAddon {
+	excludeSuffixMap := make(map[string]bool)
+	for _, ext := range excludeSuffix {
+		excludeSuffixMap[ext] = true
+	}
+	return &InfoAddon{
+		cfg:           cfg,
+		scanTask:      scanTask,
+		excludeSuffix: excludeSuffixMap,
+	}
 }
 
 // 判断域名黑白名单
-func isDomainAllowed(f *proxy.Flow) bool {
+func (IA *InfoAddon) isDomainAllowed(f *proxy.Flow) bool {
 	host := f.Request.URL.Host
-	cfg := config.GConfig.Mitmproxy
 
-	if len(cfg.IncludeDomain) > 0 && !(len(cfg.IncludeDomain) == 1 && cfg.IncludeDomain[0] == "") { // if blacklist not
-		if util.JudgeHostByRegex(cfg.IncludeDomain, host) {
-			return true // traffic allowed
-		}
-	} else {
-		if len(cfg.ExcludeDomain) > 0 && !(len(cfg.ExcludeDomain) == 1 && cfg.ExcludeDomain[0] == "") {
-			if util.JudgeHostByRegex(cfg.ExcludeDomain, host) {
-				return false
-			}
-		} else {
-			return true
-		}
+	if allowed, ok := IA.domainCache.Load(host); ok {
+		return allowed.(bool)
 	}
-	return false
+	var allowed bool
+	if len(IA.cfg.Mitmproxy.IncludeDomain) > 0 {
+		allowed = util.JudgeHostByRegex(IA.cfg.Mitmproxy.IncludeDomain, host)
+	} else if len(IA.cfg.Mitmproxy.ExcludeDomain) > 0 {
+		allowed = util.JudgeHostByRegex(IA.cfg.Mitmproxy.ExcludeDomain, host)
+	} else {
+		allowed = true
+	}
+	IA.domainCache.Store(host, allowed)
+	return allowed
 }
 
 // 从后缀判断文件类型
-func isSuffixAllowed(f *proxy.Flow) bool {
+func (IA *InfoAddon) isSuffixAllowed(f *proxy.Flow) bool {
 	ext := filepath.Ext(f.Request.URL.Path)
-	return ext == "" || !funk.Contains(config.GConfig.Mitmproxy.FilterSufffix, ext)
+	if ext == "" {
+		return true
+	}
+	return !IA.excludeSuffix[ext]
 }
 
 func (IA *InfoAddon) Response(trafficF *proxy.Flow) {
 	if trafficF.Request.Method == "CONNECT" {
 		return
 	} //skip CONNECT request
-	if isDomainAllowed(trafficF) && isSuffixAllowed(trafficF) { // total white host
-		distrib(trafficF)
+	if IA.isDomainAllowed(trafficF) && IA.isSuffixAllowed(trafficF) { // total white host
+		distrib(trafficF, IA.scanTask)
 	}
 }

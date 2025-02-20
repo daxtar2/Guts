@@ -67,31 +67,12 @@ func (tc *TemplateCache) MGetTemplates(keys []string) ([]*templates.Template, er
 	templatesSlice := make([]*templates.Template, 0, len(keys))
 	for _, cmd := range cmds {
 		if data, err := cmd.Bytes(); err == nil {
-			var tmpls *templates.Template
-			if err := json.Unmarshal(data, &tmpls); err == nil {
-				templatesSlice = append(templatesSlice, tmpls)
+			var tmpl templates.Template
+			if err := json.Unmarshal(data, &tmpl); err == nil {
+				templatesSlice = append(templatesSlice, &tmpl)
 			}
 		}
 	}
 
 	return templatesSlice, nil
-}
-
-// 获取 Redis 中缓存的 Workflows
-func (tc *TemplateCache) GetWorkflows() ([]*templates.Template, error) {
-	keys := []string{"workflows:*"} // Redis 中存储 Workflow 的键
-	workflows := []*templates.Template{}
-
-	// 批量获取 Workflow 模板
-	rawWorkflows, err := tc.MGetTemplates(keys) //一开始是MGet
-	if err != nil {
-		return nil, err
-	}
-
-	for _, raw := range rawWorkflows {
-		if tmpl, ok := raw.(*templates.Template); ok {
-			workflows = append(workflows, tmpl)
-		}
-	}
-	return workflows, nil
 }

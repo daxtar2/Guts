@@ -12,7 +12,7 @@ var RedisAddr string
 func init() {
 	viper.SetConfigName("config") // 配置文件名
 	viper.SetConfigType("yaml")   // 配置文件类型
-	viper.AddConfigPath(".")      // 配置文件路径，当前目录
+	viper.AddConfigPath("./")     // 配置文件路径，当前目录
 
 	if err := viper.ReadInConfig(); err != nil {
 		panic(fmt.Errorf("无法加载配置文件: %w", err))
