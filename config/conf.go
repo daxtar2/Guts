@@ -21,12 +21,11 @@ func loadConfig() {
 	fmt.Println("redis addr:", viper.GetString("redis.address"))
 	fmt.Println("capath:", viper.GetString("caconfig.ca_root_path"))
 	// 从配置文件获取配置信息
-	RedisAddr = viper.GetString("redis.address")
+	//RedisAddr = viper.GetString("redis.address")
 
 	if err := viper.Unmarshal(&GConfig); err != nil {
 		print(err)
 	}
-	fmt.Println(GConfig)
 }
 
 //func init() {

@@ -117,6 +117,7 @@ func NewSelfSignCA(path string) (CA, error) {
 		}
 	} else {
 		log.Debug("load root ca")
+		print(ca)
 		return ca, nil
 	}
 

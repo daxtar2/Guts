@@ -1,24 +1,29 @@
 package config
 
 type Config struct {
-	Mitmproxy Mitmproxy `yaml:"mitmproxy"`
-	HeaderMap HeaderMap `yaml:"headermap"`
-	CaConfig  CaConfig  `yaml:"caconfig"`
+	Mitmproxy Mitmproxy `mapstructure:"mitmproxy"`
+	HeaderMap HeaderMap `mapstructure:"headermap"`
+	CaConfig  CaConfig  `mapstructure:"caconfig"`
+	Redis     Redis     `mapstructure:"redis"`
 }
 
 type Mitmproxy struct {
-	AddrPort      string   `yaml:"addr_port"`
-	SslInsecure   bool     `yaml:"ssl_insecure"`
-	IncludeDomain []string `yaml:"include_domain"`
-	ExcludeDomain []string `yaml:"exclude_domain"`
-	FilterSuffix  []string `yaml:"filter_suffix"`
+	AddrPort      string   `mapstructure:"addr_port"`
+	SslInsecure   bool     `mapstructure:"ssl_insecure"`
+	IncludeDomain []string `mapstructure:"include_domain"`
+	ExcludeDomain []string `mapstructure:"exclude_domain"`
+	FilterSuffix  []string `mapstructure:"filter_suffix"`
 }
 
 type HeaderMap struct {
-	Headers   map[string]string `yaml:"headers"`
-	SetCookie []string          `yaml:"set_cookie"`
+	Headers   map[string]string `mapstructure:"headers"`
+	SetCookie []string          `mapstructure:"set_cookie"`
 }
 
 type CaConfig struct {
-	CaRootPath string `yaml:"ca_root_path"`
+	CaRootPath string `mapstructure:"ca_root_path"`
+}
+
+type Redis struct {
+	Address string `mapstructure:"address"`
 }

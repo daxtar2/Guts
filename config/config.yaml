@@ -1,15 +1,13 @@
-redis:
-  address: "127.0.0.1:6379"
-
 mitmproxy:
-  addr_port: ":9080" # 将监听端口设置为 9080
+  addr_port: ":9080"
   ssl_insecure: true
   include_domain: []
   exclude_domain: []
   filter_suffix: []
-
 headermap:
   headers: {}
   set_cookie: []
 caconfig:
   ca_root_path: "~/.mitmproxy/"
+redis:
+  address: "127.0.0.1:6379"

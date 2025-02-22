@@ -27,7 +27,7 @@ var LoaderConfig = &loader.Config{
 	Templates:        []string{"nuclei-templates", "custom-templates"},
 	TemplateURLs:     []string{"https://github.com/projectdiscovery/nuclei-templates"},
 	Workflows:        []string{"workflows/fingerprint-scan.yaml"},
-	WorkflowURLs:     []string{"https://github.com/projectdiscovery/nuclei-workflows"},
+	WorkflowURLs:     []string{"https://github.com/projectdiscovery/nuclei-templates/tree/main/workflows"},
 	ExcludeTemplates: []string{},
 	IncludeTemplates: []string{},
 
