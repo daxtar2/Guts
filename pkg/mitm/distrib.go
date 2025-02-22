@@ -1,8 +1,7 @@
-package main
+package mitm
 
 import (
 	"fmt"
-	"github.com/daxtar2/Guts/config"
 	"strings"
 	"sync"
 
@@ -15,22 +14,6 @@ var (
 	// 用于去重的map
 	scannedHosts = sync.Map{} //域名去重
 )
-
-func main() {
-	task, err := scan.NewTask(10)
-	if err != nil {
-		println(err)
-	}
-
-	mitmproxy := NewMitmproxy()
-	infoAddon := NewInfoAddon(config.GConfig, task, config.GConfig.Mitmproxy.FilterSufffix) //实例化addon
-	mitmproxy.AddAddon(infoAddon)                                                           //添加addon
-
-	if err := mitmproxy.Start(); err != nil {
-		print(err)
-	}
-
-}
 
 func distrib(f *proxy.Flow, taskIndistrib *scan.Task) {
 	parseUrl := f.Request.URL
@@ -82,6 +65,6 @@ func distrib(f *proxy.Flow, taskIndistrib *scan.Task) {
 	}(scanInput)
 }
 
-func PrintInfo(scanInput *header.PassiveResult) {
-	fmt.Println(scanInput)
-}
+//func PrintInfo(scanInput *header.PassiveResult) {
+//	fmt.Println(scanInput)
+//}

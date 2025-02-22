@@ -1,4 +1,4 @@
-package main
+package mitm
 
 import (
 	"github.com/daxtar2/Guts/config"
@@ -62,6 +62,7 @@ func (IA *InfoAddon) Response(trafficF *proxy.Flow) {
 		return
 	} //skip CONNECT request
 	if IA.isDomainAllowed(trafficF) && IA.isSuffixAllowed(trafficF) { // total white host
+		println("distrib here ...........")
 		distrib(trafficF, IA.scanTask)
 	}
 }

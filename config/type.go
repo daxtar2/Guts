@@ -1,23 +1,24 @@
 package config
 
 type Config struct {
-	Mitmproxy Mitmproxy `json:"mitmproxy"`
-	HeaderMap HeaderMap `json:"headermap"`
+	Mitmproxy Mitmproxy `yaml:"mitmproxy"`
+	HeaderMap HeaderMap `yaml:"headermap"`
+	CaConfig  CaConfig  `yaml:"caconfig"`
 }
 
 type Mitmproxy struct {
-	AddrPort      string   `json:"addr_prot"`
-	SslInsecure   bool     `json:"ssl_insecure"`
-	IncludeDomain []string `json:"include_domain"`
-	ExcludeDomain []string `json:"exclude_domain"`
-	FilterSufffix []string `json:"filter_sufffix"`
+	AddrPort      string   `yaml:"addr_port"`
+	SslInsecure   bool     `yaml:"ssl_insecure"`
+	IncludeDomain []string `yaml:"include_domain"`
+	ExcludeDomain []string `yaml:"exclude_domain"`
+	FilterSuffix  []string `yaml:"filter_suffix"`
 }
 
 type HeaderMap struct {
-	Headers   map[string]string `json:"headers"`
-	SetCookie []string          `json:"set_cookie"`
+	Headers   map[string]string `yaml:"headers"`
+	SetCookie []string          `yaml:"set_cookie"`
 }
 
 type CaConfig struct {
-	CaRootPath string `json:"ca_root_path"`
+	CaRootPath string `yaml:"ca_root_path"`
 }
