@@ -15,7 +15,7 @@ var (
 	scannedHosts = sync.Map{} //域名去重
 )
 
-func distrib(f *proxy.Flow, taskIndistrib *scan.Task) {
+func distrib(f *proxy.Flow, task *scan.Task) {
 	parseUrl := f.Request.URL
 
 	// 处理域名
@@ -57,9 +57,9 @@ func distrib(f *proxy.Flow, taskIndistrib *scan.Task) {
 		RawResponse: RespToString(f),
 	}
 
-	// 异步执行扫描
+	// 使用传入的 task 执行扫描
 	go func(input *header.PassiveResult) {
-		if err := taskIndistrib.ScanPassiveResult(input); err != nil {
+		if err := task.ScanPassiveResult(input); err != nil {
 			fmt.Printf("域名扫描失败 [%s]: %v\n", input.Host, err)
 		}
 	}(scanInput)

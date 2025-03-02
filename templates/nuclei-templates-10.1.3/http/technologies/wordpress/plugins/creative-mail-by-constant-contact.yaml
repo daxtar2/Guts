@@ -1,0 +1,49 @@
+id: wordpress-creative-mail-by-constant-contact
+
+info:
+  name: Creative Mail – Easier WordPress & WooCommerce Email Marketing Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/creative-mail-by-constant-contact/
+  metadata:
+    plugin_namespace: creative-mail-by-constant-contact
+    wpscan: https://wpscan.com/plugin/creative-mail-by-constant-contact
+  tags: tech,wordpress,wp-plugin,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/creative-mail-by-constant-contact/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/creative-mail-by-constant-contact.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4a0a0047304502201a8a96229027f66d3ec512a25c6b92d3b31a3c21e58b06ee2802a1e5a8b156ed022100fe7d303b9cb0804d56272afb98857845280e0040b6803b796822074a1353809c:922c64590222798bb761d5b6d8e72950

@@ -1,0 +1,49 @@
+id: wordpress-jetpack
+
+info:
+  name: Jetpack – WP Security, Backup, Speed, & Growth Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/jetpack/
+  metadata:
+    plugin_namespace: jetpack
+    wpscan: https://wpscan.com/plugin/jetpack
+  tags: tech,wordpress,wp-plugin,top-100,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/jetpack/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/jetpack.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4a0a00473045022100f032c2844922f8093cd429d52b106823cfada65e3dfc710353eafdf13634f22c022006937f32a392cf10f115ef624000da2ec7e11150428b36418b066826d042b8fb:922c64590222798bb761d5b6d8e72950

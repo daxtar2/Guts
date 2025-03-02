@@ -2,12 +2,12 @@ mitmproxy:
   addr_port: ":9080"
   ssl_insecure: true
   include_domain: []
-  exclude_domain: []
+  exclude_domain: ["github.com","github.io","github.com.cn","github.io.cn","baidu.com"]
   filter_suffix: []
 headermap:
   headers: {}
   set_cookie: []
 caconfig:
-  ca_root_path: "~/.mitmproxy/"
+  ca_root_path: "./certs/"
 redis:
   address: "127.0.0.1:6379"

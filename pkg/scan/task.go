@@ -28,9 +28,9 @@ type Task struct {
 }
 
 // 初始化扫描任务
-func NewTask(poolSize int) (*Task, error) {
+func NewTask(maxPoolsize int) (*Task, error) {
 	options := []nuclei.NucleiSDKOptions{
-		nuclei.WithTemplateFilters(nuclei.TemplateFilters{}),
+		nuclei.WithTemplateFilters(config.GetTemplateFilters()),
 		nuclei.EnableStatsWithOpts(nuclei.StatsOptions{MetricServerPort: 8080}),
 		nuclei.WithGlobalRateLimit(1, time.Second),
 		nuclei.WithConcurrency(nuclei.Concurrency{
@@ -43,38 +43,35 @@ func NewTask(poolSize int) (*Task, error) {
 			ProbeConcurrency:              1,
 		}),
 	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	engine, err := nuclei.NewNucleiEngineCtx(context.Background(), options...)
+	engine, err := nuclei.NewNucleiEngineCtx(ctx, options...)
 	if err != nil {
 		return nil, fmt.Errorf("创建nuclei引擎失败: %v", err)
 	}
 
-	storetmp, _ := loader.New(config.GetLoaderConfig())
-
-	storetmp.Load() //加载template和workflow
-
 	// 创建工作池
-	pool, err := ants.NewPool(poolSize, ants.WithPreAlloc(true))
+	pool, err := ants.NewPool(maxPoolsize, ants.WithPreAlloc(true))
 	if err != nil {
+		engine.Close()
 		return nil, fmt.Errorf("创建工作池失败: %v", err)
 	}
+	defer pool.Release()
 
 	// 尝试初始化Redis缓存
 	var templateCache *cache.TemplateCache
 	var useRedis bool
 
 	if config.RedisAddr != "" {
-		if tc := cache.NewTemplateCache(config.RedisAddr); err == nil {
-			templateCache = tc
-			useRedis = true
-			gologger.Info().Msgf("Redis缓存已启用: %s", config.RedisAddr)
-		} else {
-			gologger.Warning().Msgf("Redis连接失败，将使用默认加载方式: %v", err)
-		}
+		templateCache = cache.NewTemplateCache(config.RedisAddr)
+		useRedis = true
+		gologger.Info().Msgf("Redis缓存已启用: %s", config.RedisAddr)
 	}
 
+	// 初始化任务
 	t := &Task{
-		MaxPoolsize:   poolSize,
+		MaxPoolsize:   maxPoolsize,
 		Pool:          pool,
 		engine:        engine,
 		results:       make(chan *output.ResultEvent, 100),
@@ -82,6 +79,17 @@ func NewTask(poolSize int) (*Task, error) {
 		templateCache: templateCache,
 		useRedis:      useRedis,
 	}
+
+	// 初始化模板存储
+	loaderConfig := config.GetLoaderConfig()
+	store, err := loader.New(loaderConfig)
+	if err != nil {
+		engine.Close()
+		return nil, fmt.Errorf("初始化模板存储失败: %v", err)
+	}
+
+	store.Load()
+	t.engine.Store().Load()
 
 	return t, nil
 }
@@ -92,9 +100,10 @@ func (t *Task) ScanPassiveResult(result *header.PassiveResult) error {
 	target := []string{result.Host}
 	t.engine.LoadTargets(target, false)
 
-	workflows := t.engine.Store().LoadWorkflows(config.GetLoaderConfig().WorkflowURLs) //这里workflowsList
+	// 使用config包中的LoaderConfig
+	workflows := t.engine.Store().LoadWorkflows(config.GetLoaderConfig().WorkflowURLs)
 	if len(workflows) == 0 {
-		return fmt.Errorf("未找到任何有效的workflows，请检查路径")
+		return fmt.Errorf("未找到任何有效的workflows, 请检查路径")
 	}
 
 	workflowHit := false //命中指纹
@@ -120,7 +129,7 @@ func (t *Task) ScanPassiveResult(result *header.PassiveResult) error {
 	}
 
 	if !workflowHit {
-		gologger.Info().Msg("[未命中任何 Workflow，通过 Redis 动态加载模板并重新扫描]")
+		gologger.Info().Msg("[未命中任何 Workflow, 通过 Redis 动态加载模板并重新扫描]")
 		if err := t.scanWithTemplatesLoader(result); err != nil {
 			gologger.Warning().Msgf("Redis模板扫描失败: %v", err)
 		}

@@ -1,0 +1,49 @@
+id: wordpress-cmb2
+
+info:
+  name: CMB2 Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/cmb2/
+  metadata:
+    plugin_namespace: cmb2
+    wpscan: https://wpscan.com/plugin/cmb2
+  tags: tech,wordpress,wp-plugin,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/cmb2/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/cmb2.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 490a0046304402207909a92db1bedb3aa5891066d786627165812d4968fb56d816dfa481ce8f1087022076cb598c8b9bc74382db090aac5979fb8b21f3aae29d201863029a5ac5a02992:922c64590222798bb761d5b6d8e72950

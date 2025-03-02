@@ -2,58 +2,103 @@ package config
 
 import (
 	nuclei "github.com/projectdiscovery/nuclei/v3/lib"
+	"github.com/projectdiscovery/nuclei/v3/pkg/catalog/disk"
 	"github.com/projectdiscovery/nuclei/v3/pkg/catalog/loader"
 	"github.com/projectdiscovery/nuclei/v3/pkg/model/types/severity"
-	"github.com/projectdiscovery/nuclei/v3/pkg/templates/types"
+	"github.com/projectdiscovery/nuclei/v3/pkg/protocols"
+	templateTypes "github.com/projectdiscovery/nuclei/v3/pkg/templates/types"
+	"github.com/projectdiscovery/nuclei/v3/pkg/types"
 )
 
 // TemplateFilters 定义模板过滤器配置
 var TemplateFilters = nuclei.TemplateFilters{
-	Severity:          "high",
+	Severity:          "critical,high,medium",
 	ExcludeSeverities: "low,info",
 	ProtocolTypes:     "http",
-	Authors:           []string{"admin", "security_team"},
-	Tags:              []string{"xss", "rce"},
-	ExcludeTags:       []string{"slow"},
-	IncludeTags:       []string{"critical"},
-	IDs:               []string{"CVE-2024-5678"},
-	ExcludeIDs:        []string{"CVE-2023-1234"},
-	TemplateCondition: []string{"status_code == 200"},
+	Authors:           []string{},
+	Tags: []string{
+		"cve",
+		"rce",
+		"sqli",
+		"xss",
+		"ssrf",
+		"lfi",
+		"rfi",
+		"upload",
+	},
+	ExcludeTags: []string{"dos", "fuzz"},
+	IncludeTags: []string{},
+	IDs:         []string{},
+	ExcludeIDs:  []string{},
 }
+
+var DefaultConfig = &types.Options{
+	Templates:                []string{"./templates"},
+	Workflows:                []string{},
+	RemoteTemplateDomainList: []string{},
+	TemplateURLs:             []string{},
+	WorkflowURLs:             []string{},
+	ExcludedTemplates:        []string{},
+	Tags:                     []string{"cve", "rce", "sqli", "xss", "ssrf", "lfi", "rfi", "upload"},
+	ExcludeTags:              []string{"dos", "fuzz"},
+	IncludeTemplates:         []string{},
+	Authors:                  []string{},
+	Severities:               severity.Severities{severity.Critical, severity.High, severity.Medium},
+	ExcludeSeverities:        severity.Severities{severity.Low, severity.Info},
+	IncludeTags:              []string{},
+	IncludeIds:               []string{},
+	ExcludeIds:               []string{},
+	Protocols:                templateTypes.ProtocolTypes{templateTypes.HTTPProtocol},
+	ExcludeProtocols:         templateTypes.ProtocolTypes{},
+	IncludeConditions:        []string{},
+}
+
+var catalog = disk.NewCatalog("./templates/nuclei-templates-10.1.3")
+
+var ExecutorOptions = protocols.ExecutorOptions{
+	Options: &types.Options{
+		//Protocols:       []string{"http"},
+		TemplateThreads: 10,
+		Timeout:         5,
+		Retries:         1,
+		RateLimit:       150,
+		BulkSize:        25,
+		TemplateDisplay: false,
+		//NoColor:         false,
+		//JSON:            false,
+		JSONRequests: false,
+		NoMeta:       false,
+		//NoTimestamp:     false,
+		Silent:         false,
+		VerboseVerbose: false,
+		Debug:          false,
+		DebugRequests:  false,
+		DebugResponse:  false,
+		StoreResponse:  false,
+		// 其他选项...
+	},
+}
+
+var LoaderConfig = loader.NewConfig(DefaultConfig, catalog, ExecutorOptions)
 
 // LoaderConfig 定义模板加载器配置
-var LoaderConfig = &loader.Config{
-	// 基础模板和工作流配置
-	Templates:        []string{"nuclei-templates", "custom-templates"},
-	TemplateURLs:     []string{"https://github.com/projectdiscovery/nuclei-templates"},
-	Workflows:        []string{"workflows/fingerprint-scan.yaml"},
-	WorkflowURLs:     []string{"https://github.com/projectdiscovery/nuclei-templates/tree/main/workflows"},
-	ExcludeTemplates: []string{},
-	IncludeTemplates: []string{},
+// var LoaderConfig1 = &loader.Config{
+// 	Templates:    []string{"nuclei-templates"},
+// 	TemplateURLs: []string{},
+// 	Workflows:    []string{},
+// 	WorkflowURLs: []string{},
 
-	// 过滤器配置
-	Tags:              []string{"xss", "rce"},
-	ExcludeTags:       []string{"slow"},
-	Protocols:         types.ProtocolTypes{types.HTTPProtocol},
-	ExcludeProtocols:  types.ProtocolTypes{},
-	Authors:           []string{"admin", "security_team"},
-	Severities:        severity.Severities{severity.High},
-	ExcludeSeverities: severity.Severities{severity.Low, severity.Info},
-	IncludeTags:       []string{"critical"},
-	IncludeIds:        []string{"CVE-2024-5678"},
-	ExcludeIds:        []string{"CVE-2023-1234"},
-	IncludeConditions: []string{"status_code == 200"},
-}
-
-// 加载模板和工作流的配置
-// type LoaderConfig struct {
-// 	Templates []string
-// 	TemplateURLs []string
-// 	Workflows []string
-// 	WorkflowURLs []string
-// 	ExcludeTemplates []string
-// 	IncludeTemplates []string
-// 	RemoteTemplateDomainList []string
+// 	// 过滤配置
+// 	Tags:              []string{"xss", "rce"},
+// 	ExcludeTags:       []string{"slow"},
+// 	IncludeTags:       []string{"critical"},
+// 	Authors:           []string{"admin", "security_team"},
+// 	Severities:        severity.Severities{severity.High, severity.Critical},
+// 	ExcludeSeverities: severity.Severities{severity.Low, severity.Info},
+// 	IncludeIds:        []string{},
+// 	ExcludeIds:        []string{},
+// 	Protocols:         templateTypes.ProtocolTypes{templateTypes.HTTPProtocol},
+// 	ExcludeProtocols:  templateTypes.ProtocolTypes{},
 // }
 
 // GetTemplateFilters 返回模板过滤器配置

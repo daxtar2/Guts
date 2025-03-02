@@ -1,0 +1,49 @@
+id: wordpress-jeg-elementor-kit
+
+info:
+  name: Jeg Elementor Kit Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/jeg-elementor-kit/
+  metadata:
+    plugin_namespace: jeg-elementor-kit
+    wpscan: https://wpscan.com/plugin/jeg-elementor-kit
+  tags: tech,wordpress,wp-plugin,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/jeg-elementor-kit/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/jeg-elementor-kit.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4b0a00483046022100fae9ecf19d6132fb43149a678124944c2defdee51c54ae57fb8f3f7d5bffd761022100bde29d6c1305f94e02ed0eccfe5d70577c54c8f58488e0069596d3844ae9aaeb:922c64590222798bb761d5b6d8e72950

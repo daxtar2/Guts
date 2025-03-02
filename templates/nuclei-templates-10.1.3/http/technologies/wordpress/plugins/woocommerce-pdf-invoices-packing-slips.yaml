@@ -1,0 +1,49 @@
+id: wordpress-woocommerce-pdf-invoices-packing-slips
+
+info:
+  name: PDF Invoices & Packing Slips for WooCommerce Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/woocommerce-pdf-invoices-packing-slips/
+  metadata:
+    plugin_namespace: woocommerce-pdf-invoices-packing-slips
+    wpscan: https://wpscan.com/plugin/woocommerce-pdf-invoices-packing-slips
+  tags: tech,wordpress,wp-plugin,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/woocommerce-pdf-invoices-packing-slips/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/woocommerce-pdf-invoices-packing-slips.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4a0a00473045022100828c3679080d7dca40935527969b05397e3ef650c6e15d37d75b0c6d508c193d02200ee6f812d14ae243c72ff4da9834d46e418c782e383b55794ec721afcc12b9e5:922c64590222798bb761d5b6d8e72950
