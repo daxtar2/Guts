@@ -34,6 +34,7 @@ var TemplateFilters = nuclei.TemplateFilters{
 
 var DefaultConfig = &types.Options{
 	Templates:                []string{"./templates"},
+	NewTemplatesDirectory:    "./templates",
 	Workflows:                []string{},
 	RemoteTemplateDomainList: []string{},
 	TemplateURLs:             []string{},
@@ -53,7 +54,7 @@ var DefaultConfig = &types.Options{
 	IncludeConditions:        []string{},
 }
 
-var catalog = disk.NewCatalog("./templates/nuclei-templates-10.1.3")
+var catalog = disk.NewCatalog(DefaultConfig.NewTemplatesDirectory)
 
 var ExecutorOptions = protocols.ExecutorOptions{
 	Options: &types.Options{
@@ -79,7 +80,23 @@ var ExecutorOptions = protocols.ExecutorOptions{
 	},
 }
 
-var LoaderConfig = loader.NewConfig(DefaultConfig, catalog, ExecutorOptions)
+var LoaderConfig = &loader.Config{
+	Templates:    DefaultConfig.Templates,
+	WorkflowURLs: DefaultConfig.WorkflowURLs,
+	Workflows:    DefaultConfig.Workflows,
+
+	// 添加必要的过滤器配置
+	Tags:              DefaultConfig.Tags,
+	ExcludeTags:       DefaultConfig.ExcludeTags,
+	Authors:           DefaultConfig.Authors,
+	Severities:        DefaultConfig.Severities,
+	ExcludeSeverities: DefaultConfig.ExcludeSeverities,
+	IncludeIds:        DefaultConfig.IncludeIds,
+	ExcludeIds:        DefaultConfig.ExcludeIds,
+	Protocols:         DefaultConfig.Protocols,
+	Catalog:           catalog,
+	ExcludeProtocols:  DefaultConfig.ExcludeProtocols,
+}
 
 // LoaderConfig 定义模板加载器配置
 // var LoaderConfig1 = &loader.Config{

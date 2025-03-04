@@ -1,5 +1,11 @@
 package config
 
+import (
+	"context"
+
+	"github.com/redis/go-redis/v9"
+)
+
 type Config struct {
 	Mitmproxy Mitmproxy `mapstructure:"mitmproxy"`
 	HeaderMap HeaderMap `mapstructure:"headermap"`
@@ -27,3 +33,30 @@ type CaConfig struct {
 type Redis struct {
 	Address string `mapstructure:"address"`
 }
+
+type RedisManager struct {
+	client *redis.Client
+	ctx    context.Context
+}
+
+// type DefaultConfig struct {
+// 	Templates:       goflags.StringSlice
+// 	Workflows:                goflags.StringSlice
+// 	RemoteTemplateDomainList: goflags.StringSlice
+// 	TemplateURLs:             goflags.StringSlice
+// 	WorkflowURLs:             goflags.StringSlice
+// 	ExcludeTemplates:         goflags.StringSlice
+// 	Tags:                     goflags.StringSlice
+// 	ExcludeTags:              goflags.StringSlice
+// 	IncludeTemplates:         goflags.StringSlice
+// 	Authors:                  goflags.StringSlice
+// 	Severities:               severity.Severities
+// 	ExcludeSeverities:        severity.Severities
+// 	IncludeTags:              goflags.StringSlice
+// 	IncludeIds:               goflags.StringSlice
+// 	ExcludeIds:               goflags.StringSlice
+// 	Protocols:                types.ProtocolTypes
+// 	ExcludeProtocols:         types.ProtocolTypes
+// 	IncludeConditions:        goflags.StringSlice
+// 	ExecutorOptions:          protocols.ExecutorOptions
+// }

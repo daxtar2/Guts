@@ -1,78 +1,72 @@
+//redis客户端交互
+
 package cache
 
 import (
 	"context"
 	"encoding/json"
-	"time"
 
-	"github.com/projectdiscovery/nuclei/v3/pkg/templates"
+	"github.com/daxtar2/Guts/pkg/models"
 	"github.com/redis/go-redis/v9"
 )
 
-type TemplateCache struct {
+type RedisClient struct {
 	client *redis.Client
-	ttl    time.Duration
+	ctx    context.Context
 }
 
-func NewTemplateCache(addr string) *TemplateCache {
+// NewRedisClient 创建新的 Redis 客户端
+func NewRedisClient(addr string) *RedisClient {
 	client := redis.NewClient(&redis.Options{
 		Addr: addr,
 		DB:   0,
 	})
 
-	return &TemplateCache{
+	return &RedisClient{
 		client: client,
-		ttl:    24 * time.Hour, // 缓存24小时
+		ctx:    context.Background(),
 	}
 }
 
-// 存储模板
-func (tc *TemplateCache) SetTemplate(key string, tmpl *templates.Template) error {
-	data, err := json.Marshal(tmpl)
+// Get 从 Redis 获取数据
+func (rc *RedisClient) Get(key string) ([]byte, error) {
+	return rc.client.Get(rc.ctx, key).Bytes()
+}
+
+// Set 将数据存储到 Redis
+func (rc *RedisClient) Set(key string, value []byte) error {
+	return rc.client.Set(rc.ctx, key, value, 0).Err()
+}
+
+// Publish 发布消息到 Redis
+func (rc *RedisClient) Publish(channel string, message []byte) error {
+	return rc.client.Publish(rc.ctx, channel, message).Err()
+}
+
+// Subscribe 订阅 Redis 频道
+func (rc *RedisClient) Subscribe(channel string) *redis.PubSub {
+	return rc.client.Subscribe(rc.ctx, channel)
+}
+
+// SaveScanResult 保存扫描结果到 Redis
+func (rc *RedisClient) SaveScanResult(result *models.ScanResult) error {
+	data, err := json.Marshal(result)
 	if err != nil {
 		return err
 	}
-	return tc.client.Set(context.Background(), key, data, tc.ttl).Err()
+	return rc.client.Set(rc.ctx, "scan_result:"+result.ID, data, 0).Err()
 }
 
-// 获取模板
-func (tc *TemplateCache) GetTemplate(key string) (*templates.Template, error) {
-	data, err := tc.client.Get(context.Background(), key).Bytes()
+// GetScanResult 从 Redis 获取扫描结果
+func (rc *RedisClient) GetScanResult(id string) (*models.ScanResult, error) {
+	data, err := rc.client.Get(rc.ctx, "scan_result:"+id).Bytes()
 	if err != nil {
 		return nil, err
 	}
 
-	var tmpl templates.Template
-	if err := json.Unmarshal(data, &tmpl); err != nil {
+	var result models.ScanResult
+	if err := json.Unmarshal(data, &result); err != nil {
 		return nil, err
 	}
-
-	return &tmpl, nil
-}
-
-// 批量获取模板
-func (tc *TemplateCache) MGetTemplates(keys []string) ([]*templates.Template, error) {
-	pipe := tc.client.Pipeline()
-	cmds := make([]*redis.StringCmd, len(keys))
-
-	for i, key := range keys {
-		cmds[i] = pipe.Get(context.Background(), key)
-	}
-
-	_, err := pipe.Exec(context.Background())
-	if err != nil && err != redis.Nil {
-		return nil, err
-	}
-
-	templatesSlice := make([]*templates.Template, 0, len(keys))
-	for _, cmd := range cmds {
-		if data, err := cmd.Bytes(); err == nil {
-			var tmpl templates.Template
-			if err := json.Unmarshal(data, &tmpl); err == nil {
-				templatesSlice = append(templatesSlice, &tmpl)
-			}
-		}
-	}
-
-	return templatesSlice, nil
+	return &result, nil
 }

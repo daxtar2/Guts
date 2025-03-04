@@ -5,6 +5,7 @@ import (
 
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
+	"github.com/daxtar2/Guts/pkg/models"
 	"github.com/daxtar2/Guts/pkg/scan"
 	"github.com/daxtar2/Guts/pkg/util"
 	"github.com/thoas/go-funk"
@@ -74,4 +75,8 @@ func (IA *InfoAddon) Response(f *proxy.Flow) {
 	if isDomainAllowed(f) && isSuffixAllowed(f) { // total white host
 		distrib(f, IA.task)
 	}
+}
+
+func SomeFunction(newConfig models.Mitmproxy) {
+	// 使用 newConfig
 }

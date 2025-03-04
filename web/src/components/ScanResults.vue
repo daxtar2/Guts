@@ -5,8 +5,15 @@
     <!-- 结果列表 -->
     <el-table :data="scanResults" style="width: 100%">
       <el-table-column prop="host" label="域名"></el-table-column>
-      <el-table-column prop="port" label="端口"></el-table-column>
-      <el-table-column prop="url" label="URL"></el-table-column>
+      <el-table-column prop="vuln_name" label="漏洞名称"></el-table-column>
+      <el-table-column prop="severity" label="严重程度">
+        <template #default="scope">
+          <el-tag :type="getSeverityType(scope.row.severity)">
+            {{ scope.row.severity }}
+          </el-tag>
+        </template>
+      </el-table-column>
+      <el-table-column prop="create_time" label="发现时间"></el-table-column>
       <el-table-column label="操作">
         <template #default="scope">
           <el-button @click="viewDetail(scope.row)">查看详情</el-button>
@@ -61,6 +68,16 @@ export default {
       const data = await response.json()
       this.selectedResult = data.data
       this.detailVisible = true
+    },
+    
+    getSeverityType(severity) {
+      const types = {
+        'critical': 'danger',
+        'high': 'error',
+        'medium': 'warning',
+        'low': 'info'
+      }
+      return types[severity.toLowerCase()] || 'info'
     }
   },
   

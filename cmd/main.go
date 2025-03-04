@@ -22,7 +22,7 @@ func main() {
 	config.GConfig.CaConfig.CaRootPath = certDir
 
 	// 创建API服务
-	server := api.NewServer()
+	server := api.NewServer(config.RedisAddr)
 
 	// 启动代理服务
 	go func() {
