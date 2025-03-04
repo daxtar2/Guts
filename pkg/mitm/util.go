@@ -3,11 +3,14 @@ package mitm
 import (
 	"bytes"
 	"fmt"
-	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
 	"net/http"
 	"strings"
 	"unicode"
 	"unicode/utf8"
+
+	"github.com/daxtar2/Guts/pkg/logger"
+	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
+	"go.uber.org/zap"
 )
 
 // 将Request 请求转换成存储成string
@@ -41,7 +44,7 @@ func ReqToString(req *proxy.Request) string {
 
 	// 写入请求头
 	if err := req.Header.WriteSubset(buf, nil); err != nil {
-		panic(err)
+		logger.Error("写入请求头失败", zap.Error(err))
 	}
 
 	buf.WriteString("\r\n") // HTTP 头部结束
@@ -67,7 +70,7 @@ func RespToString(f *proxy.Flow) string {
 
 	// 写入响应头
 	if err := f.Response.Header.WriteSubset(buf, nil); err != nil {
-		panic(err)
+		logger.Error("写入响应头失败", zap.Error(err))
 	}
 
 	buf.WriteString("\r\n") // HTTP 头部结束

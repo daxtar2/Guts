@@ -3,8 +3,10 @@ package api
 import (
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/cache"
+	"github.com/daxtar2/Guts/pkg/logger"
 	"github.com/daxtar2/Guts/pkg/models"
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type Server struct {
@@ -13,18 +15,40 @@ type Server struct {
 }
 
 func NewServer(redisAddr string) *Server {
+	//gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+
+	logger.Info("开始创建API服务")
+
+	// 创建Redis管理器
+	redisManager := cache.NewRedisManager(redisAddr)
+	logger.Info("Redis管理器创建完成", zap.String("redis_addr", redisAddr))
 
 	server := &Server{
 		router:       r,
-		redisManager: cache.NewRedisManager(redisAddr),
+		redisManager: redisManager,
 	}
 
 	// 监听配置变更
-	configWrapper, _ := server.redisManager.LoadConfigWrapper()
-	configWrapper.WatchConfig(func(config *models.Config) {
-		// 处理配置变更
-	})
+	configWrapper, err := server.redisManager.LoadConfigWrapper()
+	if err != nil {
+		logger.Error("加载配置Wrapper失败", zap.Error(err))
+		// 不要在这里返回错误，继续执行
+	}
+
+	if configWrapper == nil {
+		logger.Error("配置Wrapper为空")
+	} else {
+		// 设置配置变更监听
+		configWrapper.WatchConfig(func(config *models.Config) {
+			if config == nil {
+				logger.Warn("收到空配置更新")
+				return
+			}
+			logger.Info("收到配置更新", zap.Any("config", config))
+		})
+		logger.Info("配置变更监听器设置完成")
+	}
 
 	// API 路由
 	api := r.Group("/api")
@@ -41,6 +65,7 @@ func NewServer(redisAddr string) *Server {
 		// 获取当前过滤配置
 		api.GET("/config/filter", server.GetFilterConfig)
 	}
+	logger.Info("API路由设置完成")
 
 	return server
 }
@@ -72,8 +97,9 @@ func (s *Server) GetScanResultDetail(c *gin.Context) {
 
 // 更新流量过滤配置
 func (s *Server) UpdateFilterConfig(c *gin.Context) {
-	var newConfig models.Mitmproxy
+	var newConfig models.MitmproxyConfig
 	if err := c.BindJSON(&newConfig); err != nil {
+		logger.Error("解析配置JSON失败", zap.Error(err))
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
@@ -99,24 +125,43 @@ func (s *Server) UpdateFilterConfig(c *gin.Context) {
 		return
 	}
 
+	logger.Info("配置更新成功",
+		zap.Any("new_config", newConfig),
+		zap.String("client_ip", c.ClientIP()),
+	)
+
 	c.JSON(200, gin.H{
 		"status":  "success",
 		"message": "Filter configuration updated",
 	})
 }
 
-// 获取当前过滤配置
+// GetFilterConfig 获取当前过滤配置
 func (s *Server) GetFilterConfig(c *gin.Context) {
-	// 从 Redis 获取最新配置
-	config, err := s.redisManager.LoadConfigWrapper()
+	// 首先尝试从 Redis 获取配置
+	configWrapper, err := s.redisManager.LoadConfigWrapper()
 	if err != nil {
+		logger.Warn("从Redis加载配置失败，将使用全局配置", zap.Error(err))
+		// 使用全局配置
+		c.JSON(200, gin.H{
+			"status": "success",
+			"data":   config.GConfig.Mitmproxy,
+		})
+		return
+	}
+
+	// 从ConfigWrapper获取配置
+	conf, err := configWrapper.LoadConfig()
+	if err != nil {
+		logger.Error("加载配置失败", zap.Error(err))
 		c.JSON(500, gin.H{"error": "Failed to load config"})
 		return
 	}
 
+	// 返回配置
 	c.JSON(200, gin.H{
 		"status": "success",
-		"data":   config.Mitmproxy,
+		"data":   conf.Mitmproxy,
 	})
 }
 

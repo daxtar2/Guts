@@ -4,9 +4,12 @@ package cache
 
 import (
 	"encoding/json"
+	"fmt"
 
+	"go.uber.org/zap"
 	"golang.org/x/net/context"
 
+	"github.com/daxtar2/Guts/pkg/logger"
 	"github.com/daxtar2/Guts/pkg/models"
 )
 
@@ -30,13 +33,33 @@ func NewRedisManager(addr string) *RedisManager {
 
 // LoadConfigWrapper 从 Redis 加载配置
 func (rm *RedisManager) LoadConfigWrapper() (*ConfigWrapper, error) {
-	return NewConfigWrapper(rm), nil
+	logger.Info("开始创建ConfigWrapper")
+
+	wrapper := NewConfigWrapper(rm)
+
+	// 尝试加载初始配置
+	config, err := wrapper.LoadConfig()
+	if err != nil {
+		logger.Warn("首次加载配置失败，将使用默认配置", zap.Error(err))
+		// 使用默认配置
+		defaultConfig := &models.Config{}
+		config, err = defaultConfig.LoadConfig()
+		if err != nil {
+			return nil, fmt.Errorf("加载默认配置失败: %v", err)
+		}
+	}
+
+	wrapper.config = config
+	logger.Info("ConfigWrapper创建完成", zap.Any("config", config))
+
+	return wrapper, nil
 }
 
 // SaveConfig 保存配置到 Redis
 func (rm *RedisManager) SaveConfig(config *models.Config) error {
 	data, err := json.Marshal(config)
 	if err != nil {
+		logger.Error("保存配置失败", zap.Error(err))
 		return err
 	}
 	return rm.client.Set(ConfigKey, data)
@@ -50,11 +73,13 @@ func (rm *RedisManager) WatchConfig(callback func(ConfigInterface)) {
 	for {
 		msg, err := pubsub.ReceiveMessage(rm.ctx)
 		if err != nil {
+			logger.Error("监听配置变更失败", zap.Error(err))
 			continue
 		}
 
 		var config models.Config
 		if err := json.Unmarshal([]byte(msg.Payload), &config); err != nil {
+			logger.Error("解析配置变更失败", zap.Error(err))
 			continue
 		}
 
@@ -66,6 +91,7 @@ func (rm *RedisManager) WatchConfig(callback func(ConfigInterface)) {
 func (rm *RedisManager) PublishUpdate(config ConfigInterface) error {
 	data, err := json.Marshal(config)
 	if err != nil {
+		logger.Error("发布配置更新失败", zap.Error(err))
 		return err
 	}
 	return rm.client.Publish("config:update", data)
@@ -73,5 +99,10 @@ func (rm *RedisManager) PublishUpdate(config ConfigInterface) error {
 
 // GetScanResult 从 Redis 获取扫描结果
 func (rm *RedisManager) GetScanResult(id string) (*models.ScanResult, error) {
-	return rm.client.GetScanResult(id)
+	result, err := rm.client.GetScanResult(id)
+	if err != nil {
+		logger.Error("获取扫描结果失败", zap.Error(err))
+		return nil, err
+	}
+	return result, nil
 }

@@ -13,16 +13,16 @@ import (
 
 type InfoAddon struct {
 	proxy.BaseAddon
-	config     *config.Config
+	config     *models.Config
 	task       *scan.Task
 	filterList []string
 }
 
 // 添加配置更新通道
-var configUpdateChan = make(chan config.Mitmproxy, 1)
+var configUpdateChan = make(chan models.MitmproxyConfig, 1)
 
 // 更新配置的方法
-func UpdateConfig(newConfig config.Mitmproxy) {
+func UpdateConfig(newConfig models.MitmproxyConfig) {
 	configUpdateChan <- newConfig
 }
 
@@ -53,7 +53,7 @@ func isSuffixAllowed(f *proxy.Flow) bool {
 	return ext == "" || !funk.Contains(config.GConfig.Mitmproxy.FilterSuffix, ext)
 }
 
-func NewInfoAddon(config *config.Config, task *scan.Task, filterList []string) *InfoAddon {
+func NewInfoAddon(config *models.Config, task *scan.Task, filterList []string) *InfoAddon {
 	return &InfoAddon{
 		config:     config,
 		task:       task,
@@ -77,6 +77,6 @@ func (IA *InfoAddon) Response(f *proxy.Flow) {
 	}
 }
 
-func SomeFunction(newConfig models.Mitmproxy) {
+func SomeFunction(newConfig models.MitmproxyConfig) {
 	// 使用 newConfig
 }

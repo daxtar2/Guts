@@ -1,13 +1,14 @@
 package mitm
 
 import (
-	"fmt"
 	"strings"
 	"sync"
 
 	"github.com/daxtar2/Guts/pkg/header"
+	"github.com/daxtar2/Guts/pkg/logger"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
 	"github.com/daxtar2/Guts/pkg/scan"
+	"go.uber.org/zap"
 )
 
 var (
@@ -60,11 +61,7 @@ func distrib(f *proxy.Flow, task *scan.Task) {
 	// 使用传入的 task 执行扫描
 	go func(input *header.PassiveResult) {
 		if err := task.ScanPassiveResult(input); err != nil {
-			fmt.Printf("域名扫描失败 [%s]: %v\n", input.Host, err)
+			logger.Error("域名扫描失败", zap.String("host", input.Host), zap.Error(err))
 		}
 	}(scanInput)
 }
-
-//func PrintInfo(scanInput *header.PassiveResult) {
-//	fmt.Println(scanInput)
-//}

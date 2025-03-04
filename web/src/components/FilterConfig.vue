@@ -1,118 +1,105 @@
 <template>
   <div class="filter-config">
-    <h2>流量过滤配置</h2>
-    
-    <el-form :model="filterConfig" label-width="120px">
-      <!-- 文件类型过滤 -->
-      <el-form-item label="文件类型过滤">
-        <el-select v-model="filterConfig.filterSuffix" multiple>
-          <el-option label=".js" value=".js"></el-option>
-          <el-option label=".php" value=".php"></el-option>
-          <el-option label=".css" value=".css"></el-option>
-          <el-option label=".jpg" value=".jpg"></el-option>
-          <el-option label=".png" value=".png"></el-option>
-        </el-select>
-      </el-form-item>
-      
-      <!-- 域名白名单 -->
-      <el-form-item label="域名白名单">
-        <el-input
-          v-model="newDomain"
-          placeholder="输入域名后回车添加"
-          @keyup.enter="addDomain('include')"
-        ></el-input>
-        <el-tag
-          v-for="domain in filterConfig.includeDomain"
-          :key="domain"
-          closable
-          @close="removeDomain(domain, 'include')"
-        >
-          {{ domain }}
-        </el-tag>
-      </el-form-item>
-      
-      <!-- 域名黑名单 -->
-      <el-form-item label="域名黑名单">
-        <el-input
-          v-model="newExcludeDomain"
-          placeholder="输入域名后回车添加"
-          @keyup.enter="addDomain('exclude')"
-        ></el-input>
-        <el-tag
-          v-for="domain in filterConfig.excludeDomain"
-          :key="domain"
-          closable
-          type="danger"
-          @close="removeDomain(domain, 'exclude')"
-        >
-          {{ domain }}
-        </el-tag>
-      </el-form-item>
-      
-      <el-form-item>
-        <el-button type="primary" @click="saveConfig">保存配置</el-button>
-      </el-form-item>
-    </el-form>
+    <h2>过滤配置</h2>
+    <a-form :model="formState" @finish="onFinish">
+      <!-- 包含域名 -->
+      <a-form-item label="包含域名">
+        <a-select
+          v-model:value="formState.includeDomain"
+          mode="tags"
+          style="width: 100%"
+          placeholder="请输入要包含的域名"
+        />
+      </a-form-item>
+
+      <!-- 排除域名 -->
+      <a-form-item label="排除域名">
+        <a-select
+          v-model:value="formState.excludeDomain"
+          mode="tags"
+          style="width: 100%"
+          placeholder="请输入要排除的域名"
+        />
+      </a-form-item>
+
+      <!-- 过滤后缀 -->
+      <a-form-item label="过滤后缀">
+        <a-select
+          v-model:value="formState.filterSuffix"
+          mode="tags"
+          style="width: 100%"
+          placeholder="请输入要过滤的文件后缀"
+        />
+      </a-form-item>
+
+      <a-form-item>
+        <a-button type="primary" html-type="submit">保存配置</a-button>
+      </a-form-item>
+    </a-form>
   </div>
 </template>
 
 <script>
-export default {
-  data() {
-    return {
-      filterConfig: {
-        filterSuffix: [],
-        includeDomain: [],
-        excludeDomain: [],
-      },
-      newDomain: '',
-      newExcludeDomain: '',
-    }
-  },
-  
-  methods: {
-    async loadConfig() {
-      const response = await fetch('/api/config/filter')
-      const data = await response.json()
-      this.filterConfig = data.data
-    },
-    
-    async saveConfig() {
-      await fetch('/api/config/filter', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(this.filterConfig),
-      })
-      
-      this.$message.success('配置已更新')
-    },
-    
-    addDomain(type) {
-      const domain = type === 'include' ? this.newDomain : this.newExcludeDomain
-      if (domain) {
-        if (type === 'include') {
-          this.filterConfig.includeDomain.push(domain)
-          this.newDomain = ''
-        } else {
-          this.filterConfig.excludeDomain.push(domain)
-          this.newExcludeDomain = ''
+import { defineComponent, ref, onMounted } from 'vue';
+import { message } from 'ant-design-vue';
+import axios from 'axios';
+
+export default defineComponent({
+  name: 'FilterConfig',
+  setup() {
+    const formState = ref({
+      includeDomain: [],
+      excludeDomain: [],
+      filterSuffix: [],
+    });
+
+    // 加载配置
+    const loadConfig = async () => {
+      try {
+        const response = await axios.get('/api/config/filter');
+        if (response.data.status === 'success') {
+          formState.value = {
+            includeDomain: response.data.data.includedomain || [],
+            excludeDomain: response.data.data.excludedomain || [],
+            filterSuffix: response.data.data.filtersuffix || [],
+          };
         }
+      } catch (error) {
+        message.error('加载配置失败');
+        console.error('加载配置失败:', error);
       }
-    },
-    
-    removeDomain(domain, type) {
-      if (type === 'include') {
-        this.filterConfig.includeDomain = this.filterConfig.includeDomain.filter(d => d !== domain)
-      } else {
-        this.filterConfig.excludeDomain = this.filterConfig.excludeDomain.filter(d => d !== domain)
+    };
+
+    // 保存配置
+    const onFinish = async (values) => {
+      try {
+        const response = await axios.post('/api/config/filter', {
+          includedomain: values.includeDomain,
+          excludedomain: values.excludeDomain,
+          filtersuffix: values.filterSuffix,
+          addr_port: ':9080',
+          ssl_insecure: true,
+        });
+        
+        if (response.data.status === 'success') {
+          message.success('配置更新成功');
+          await loadConfig(); // 重新加载配置
+        }
+      } catch (error) {
+        message.error('保存配置失败');
+        console.error('保存配置失败:', error);
       }
-    },
+    };
+
+    // 组件挂载时加载配置
+    onMounted(() => {
+      loadConfig();
+    });
+
+    return {
+      formState,
+      onFinish,
+    };
   },
-  
-  mounted() {
-    this.loadConfig()
-  }
-}
+});
 </script> 
