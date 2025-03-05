@@ -4,17 +4,22 @@ headermap:
     headers: {}
     setcookie: []
 mitmproxy:
-    addrport: :9080
-    sslinsecure: true
-    includedomain: []
+    addrport: ""
+    sslinsecure: false
+    includedomain:
+        - 124.70.64.48:48519
     excludedomain:
         - github.com
-        - github.io
-        - github.com.cn
-        - github.io.cn
         - baidu.com
-    filtersuffix:
-        - .png
-        - .jpg
+        - wetab.link
+        - avatars.githubusercontent.com
+        - cn.bing.com
+        - api.wetab.link
+        - luna-ai.youdao.com
+        - www.bilibili.com
+        - chaos.com
+        - youdao.com
+        - microsoft.com
+    filtersuffix: []
 redis:
     address: 127.0.0.1:6379

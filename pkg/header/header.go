@@ -1,6 +1,9 @@
 package header
 
-import "net/url"
+import (
+	"net/url"
+	"time"
+)
 
 type PassiveResult struct {
 	Url          string              `json:"url"`
@@ -16,4 +19,8 @@ type PassiveResult struct {
 	RawResponse  string              `json:"raw_response"`
 	ResponseBody string              `json:"response_body"`
 	TechStack    map[string][]string `json:"tech_stack"`
+	StatusCode   int                 `json:"status_code"`
+	Body         []byte              `json:"body"`
+	Timestamp    time.Time           `json:"timestamp"`
+	SessionID    string              `json:"session_id"`
 }

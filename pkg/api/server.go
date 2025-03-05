@@ -1,6 +1,15 @@
 package api
 
 import (
+	"net/http"
+	"os"
+	"path"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
+
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/cache"
 	"github.com/daxtar2/Guts/pkg/logger"
@@ -64,19 +73,50 @@ func NewServer(redisAddr string) *Server {
 
 		// 获取当前过滤配置
 		api.GET("/config/filter", server.GetFilterConfig)
+
+		// 获取日志文件列表
+		api.GET("/logs", server.GetLogFiles)
+
+		// 获取日志文件内容
+		api.GET("/logs/:filename", server.GetLogContent)
 	}
 	logger.Info("API路由设置完成")
 
 	return server
 }
 
-// 获取扫描结果列表
+// GetScanResults 获取扫描结果列表
 func (s *Server) GetScanResults(c *gin.Context) {
-	// 从 Redis 获取扫描结果列表
-	// 这里可以实现获取所有扫描结果的逻辑
-	c.JSON(200, gin.H{
+	// 获取分页参数
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "10"))
+
+	logger.Info("获取扫描结果请求",
+		zap.Int("page", page),
+		zap.Int("pageSize", pageSize))
+
+	// 从Redis获取结果
+	results, total, err := s.redisManager.Client.GetScanResults(page, pageSize)
+	if err != nil {
+		logger.Error("获取扫描结果失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "获取扫描结果失败",
+		})
+		return
+	}
+
+	logger.Info("成功获取扫描结果",
+		zap.Int("total", int(total)),
+		zap.Int("results_count", len(results)))
+
+	// 返回符合前端要求的格式
+	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
-		"data":   "获取扫描结果的逻辑未实现", // 这里可以返回实际的结果
+		"data": gin.H{
+			"results": results,
+			"total":   total,
+		},
 	})
 }
 
@@ -138,6 +178,8 @@ func (s *Server) UpdateFilterConfig(c *gin.Context) {
 
 // GetFilterConfig 获取当前过滤配置
 func (s *Server) GetFilterConfig(c *gin.Context) {
+	logger.Info("收到获取配置请求")
+
 	// 首先尝试从 Redis 获取配置
 	configWrapper, err := s.redisManager.LoadConfigWrapper()
 	if err != nil {
@@ -145,7 +187,13 @@ func (s *Server) GetFilterConfig(c *gin.Context) {
 		// 使用全局配置
 		c.JSON(200, gin.H{
 			"status": "success",
-			"data":   config.GConfig.Mitmproxy,
+			"data": gin.H{
+				"includedomain": config.GConfig.Mitmproxy.IncludeDomain,
+				"excludedomain": config.GConfig.Mitmproxy.ExcludeDomain,
+				"filtersuffix":  config.GConfig.Mitmproxy.FilterSuffix,
+				"addr_port":     config.GConfig.Mitmproxy.AddrPort,
+				"ssl_insecure":  config.GConfig.Mitmproxy.SslInsecure,
+			},
 		})
 		return
 	}
@@ -154,14 +202,128 @@ func (s *Server) GetFilterConfig(c *gin.Context) {
 	conf, err := configWrapper.LoadConfig()
 	if err != nil {
 		logger.Error("加载配置失败", zap.Error(err))
-		c.JSON(500, gin.H{"error": "Failed to load config"})
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to load config",
+		})
 		return
 	}
 
 	// 返回配置
 	c.JSON(200, gin.H{
 		"status": "success",
-		"data":   conf.Mitmproxy,
+		"data": gin.H{
+			"includedomain": conf.Mitmproxy.IncludeDomain,
+			"excludedomain": conf.Mitmproxy.ExcludeDomain,
+			"filtersuffix":  conf.Mitmproxy.FilterSuffix,
+			"addr_port":     conf.Mitmproxy.AddrPort,
+			"ssl_insecure":  conf.Mitmproxy.SslInsecure,
+		},
+	})
+}
+
+// LogFile 日志文件信息
+type LogFile struct {
+	Name         string    `json:"name"`
+	Size         int64     `json:"size"`
+	LastModified time.Time `json:"last_modified"`
+}
+
+// GetLogFiles 获取日志文件列表
+func (s *Server) GetLogFiles(c *gin.Context) {
+	page := c.DefaultQuery("page", "1")
+	pageSize := c.DefaultQuery("pageSize", "10")
+
+	pageNum, _ := strconv.Atoi(page)
+	size, _ := strconv.Atoi(pageSize)
+
+	// 读取日志目录
+	files, err := os.ReadDir("logs")
+	if err != nil {
+		logger.Error("读取日志目录失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to read logs directory",
+		})
+		return
+	}
+
+	var logFiles []LogFile
+	for _, file := range files {
+		if strings.HasSuffix(file.Name(), ".log") {
+			info, err := file.Info()
+			if err != nil {
+				continue
+			}
+			logFiles = append(logFiles, LogFile{
+				Name:         file.Name(),
+				Size:         info.Size(),
+				LastModified: info.ModTime(),
+			})
+		}
+	}
+
+	// 计算总页数
+	total := len(logFiles)
+	totalPages := (total + size - 1) / size
+
+	// 对文件按修改时间排序（最新的在前）
+	sort.Slice(logFiles, func(i, j int) bool {
+		return logFiles[i].LastModified.After(logFiles[j].LastModified)
+	})
+
+	// 分页
+	start := (pageNum - 1) * size
+	end := start + size
+	if end > total {
+		end = total
+	}
+	if start >= total {
+		start = total
+	}
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"files":       logFiles[start:end],
+			"total":       total,
+			"totalPages":  totalPages,
+			"currentPage": pageNum,
+			"pageSize":    size,
+		},
+	})
+}
+
+// GetLogContent 获取日志文件内容
+func (s *Server) GetLogContent(c *gin.Context) {
+	filename := c.Param("filename")
+
+	// 安全检查：确保文件名只包含允许的字符
+	if !regexp.MustCompile(`^[\w\-\.]+\.log$`).MatchString(filename) {
+		c.JSON(400, gin.H{
+			"status":  "error",
+			"message": "Invalid filename",
+		})
+		return
+	}
+
+	filepath := path.Join("logs", filename)
+	content, err := os.ReadFile(filepath)
+	if err != nil {
+		logger.Error("读取日志文件失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to read log file",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"content":  string(content),
+			"filename": filename,
+		},
 	})
 }
 

@@ -49,13 +49,13 @@ func (rc *RedisClient) Subscribe(channel string) *redis.PubSub {
 }
 
 // SaveScanResult 保存扫描结果到 Redis
-func (rc *RedisClient) SaveScanResult(result *models.ScanResult) error {
-	data, err := json.Marshal(result)
-	if err != nil {
-		return err
-	}
-	return rc.client.Set(rc.ctx, "scan_result:"+result.ID, data, 0).Err()
-}
+// func (rc *RedisClient) SaveScanResult(result *models.ScanResult) error {
+// 	data, err := json.Marshal(result)
+// 	if err != nil {
+// 		return err
+// 	}
+// 	return rc.client.Set(rc.ctx, "scan_result:"+result.ID, data, 0).Err()
+// }
 
 // GetScanResult 从 Redis 获取扫描结果
 func (rc *RedisClient) GetScanResult(id string) (*models.ScanResult, error) {

@@ -1,48 +1,57 @@
 <template>
   <div class="filter-config">
     <h2>过滤配置</h2>
-    <a-form :model="formState" @finish="onFinish">
+    <el-form :model="formState" @submit.prevent="onFinish">
       <!-- 包含域名 -->
-      <a-form-item label="包含域名">
-        <a-select
-          v-model:value="formState.includeDomain"
-          mode="tags"
-          style="width: 100%"
+      <el-form-item label="包含域名">
+        <el-select
+          v-model="formState.includeDomain"
+          multiple
+          filterable
+          allow-create
+          default-first-option
           placeholder="请输入要包含的域名"
+          style="width: 100%"
         />
-      </a-form-item>
+      </el-form-item>
 
       <!-- 排除域名 -->
-      <a-form-item label="排除域名">
-        <a-select
-          v-model:value="formState.excludeDomain"
-          mode="tags"
-          style="width: 100%"
+      <el-form-item label="排除域名">
+        <el-select
+          v-model="formState.excludeDomain"
+          multiple
+          filterable
+          allow-create
+          default-first-option
           placeholder="请输入要排除的域名"
+          style="width: 100%"
         />
-      </a-form-item>
+      </el-form-item>
 
       <!-- 过滤后缀 -->
-      <a-form-item label="过滤后缀">
-        <a-select
-          v-model:value="formState.filterSuffix"
-          mode="tags"
-          style="width: 100%"
+      <el-form-item label="过滤后缀">
+        <el-select
+          v-model="formState.filterSuffix"
+          multiple
+          filterable
+          allow-create
+          default-first-option
           placeholder="请输入要过滤的文件后缀"
+          style="width: 100%"
         />
-      </a-form-item>
+      </el-form-item>
 
-      <a-form-item>
-        <a-button type="primary" html-type="submit">保存配置</a-button>
-      </a-form-item>
-    </a-form>
+      <el-form-item>
+        <el-button type="primary" @click="onFinish">保存配置</el-button>
+      </el-form-item>
+    </el-form>
   </div>
 </template>
 
 <script>
 import { defineComponent, ref, onMounted } from 'vue';
-import { message } from 'ant-design-vue';
 import axios from 'axios';
+import { ElMessage } from 'element-plus';
 
 export default defineComponent({
   name: 'FilterConfig',
@@ -71,22 +80,22 @@ export default defineComponent({
     };
 
     // 保存配置
-    const onFinish = async (values) => {
+    const onFinish = async () => {
       try {
         const response = await axios.post('/api/config/filter', {
-          includedomain: values.includeDomain,
-          excludedomain: values.excludeDomain,
-          filtersuffix: values.filterSuffix,
+          includedomain: formState.value.includeDomain,
+          excludedomain: formState.value.excludeDomain,
+          filtersuffix: formState.value.filterSuffix,
           addr_port: ':9080',
           ssl_insecure: true,
         });
         
         if (response.data.status === 'success') {
-          message.success('配置更新成功');
-          await loadConfig(); // 重新加载配置
+          ElMessage.success('配置更新成功');
+          await loadConfig();
         }
       } catch (error) {
-        message.error('保存配置失败');
+        ElMessage.error('保存配置失败');
         console.error('保存配置失败:', error);
       }
     };
@@ -102,4 +111,18 @@ export default defineComponent({
     };
   },
 });
-</script> 
+</script>
+
+<style scoped>
+.filter-config {
+  padding: 20px;
+}
+
+.ant-form-item {
+  margin-bottom: 24px;
+}
+
+h2 {
+  margin-bottom: 24px;
+}
+</style> 

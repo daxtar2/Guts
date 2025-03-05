@@ -18,7 +18,7 @@ const (
 )
 
 type RedisManager struct {
-	client *RedisClient
+	Client *RedisClient
 	ctx    context.Context
 }
 
@@ -26,7 +26,7 @@ type RedisManager struct {
 func NewRedisManager(addr string) *RedisManager {
 	client := NewRedisClient(addr)
 	return &RedisManager{
-		client: client,
+		Client: client,
 		ctx:    context.Background(),
 	}
 }
@@ -62,12 +62,12 @@ func (rm *RedisManager) SaveConfig(config *models.Config) error {
 		logger.Error("保存配置失败", zap.Error(err))
 		return err
 	}
-	return rm.client.Set(ConfigKey, data)
+	return rm.Client.Set(ConfigKey, data)
 }
 
 // WatchConfig 监听配置变更
 func (rm *RedisManager) WatchConfig(callback func(ConfigInterface)) {
-	pubsub := rm.client.Subscribe("config:update")
+	pubsub := rm.Client.Subscribe("config:update")
 	defer pubsub.Close()
 
 	for {
@@ -94,12 +94,12 @@ func (rm *RedisManager) PublishUpdate(config ConfigInterface) error {
 		logger.Error("发布配置更新失败", zap.Error(err))
 		return err
 	}
-	return rm.client.Publish("config:update", data)
+	return rm.Client.Publish("config:update", data)
 }
 
 // GetScanResult 从 Redis 获取扫描结果
 func (rm *RedisManager) GetScanResult(id string) (*models.ScanResult, error) {
-	result, err := rm.client.GetScanResult(id)
+	result, err := rm.Client.GetScanResult(id)
 	if err != nil {
 		logger.Error("获取扫描结果失败", zap.Error(err))
 		return nil, err

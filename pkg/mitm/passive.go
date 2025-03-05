@@ -4,11 +4,13 @@ import (
 	"path/filepath"
 
 	"github.com/daxtar2/Guts/config"
+	"github.com/daxtar2/Guts/pkg/logger"
 	"github.com/daxtar2/Guts/pkg/mitm/go-mitmproxy/proxy"
 	"github.com/daxtar2/Guts/pkg/models"
 	"github.com/daxtar2/Guts/pkg/scan"
 	"github.com/daxtar2/Guts/pkg/util"
 	"github.com/thoas/go-funk"
+	"go.uber.org/zap"
 )
 
 type InfoAddon struct {
@@ -31,26 +33,52 @@ func isDomainAllowed(f *proxy.Flow) bool {
 	host := f.Request.URL.Host
 	cfg := config.GConfig.Mitmproxy
 
-	if len(cfg.IncludeDomain) > 0 && !(len(cfg.IncludeDomain) == 1 && cfg.IncludeDomain[0] == "") { // if blacklist not
-		if util.JudgeHostByRegex(cfg.IncludeDomain, host) {
-			return true // traffic allowed
-		}
-	} else {
-		if len(cfg.ExcludeDomain) > 0 && !(len(cfg.ExcludeDomain) == 1 && cfg.ExcludeDomain[0] == "") {
-			if util.JudgeHostByRegex(cfg.ExcludeDomain, host) {
-				return false
-			}
-		} else {
-			return true
+	// 添加日志记录
+	logger.Debug("域名检查",
+		zap.String("host", host),
+		zap.Strings("include_domains", cfg.IncludeDomain),
+		zap.Strings("exclude_domains", cfg.ExcludeDomain))
+
+	// 1. 如果有白名单
+	if len(cfg.IncludeDomain) > 0 && !(len(cfg.IncludeDomain) == 1 && cfg.IncludeDomain[0] == "") {
+		allowed := util.JudgeHostByRegex(cfg.IncludeDomain, host)
+		logger.Debug("白名单检查结果",
+			zap.String("host", host),
+			zap.Bool("allowed", allowed))
+		if !allowed {
+			return false
 		}
 	}
-	return false
+
+	// 2. 如果有黑名单
+	if len(cfg.ExcludeDomain) > 0 && !(len(cfg.ExcludeDomain) == 1 && cfg.ExcludeDomain[0] == "") {
+		excluded := util.JudgeHostByRegex(cfg.ExcludeDomain, host)
+		logger.Debug("黑名单检查结果",
+			zap.String("host", host),
+			zap.Bool("excluded", excluded))
+		if excluded {
+			return false
+		}
+	}
+
+	// 3. 如果都没有配置，默认允许
+	logger.Debug("无黑白名单配置，默认允许",
+		zap.String("host", host))
+	return true
 }
 
 // 从后缀判断文件类型
 func isSuffixAllowed(f *proxy.Flow) bool {
 	ext := filepath.Ext(f.Request.URL.Path)
-	return ext == "" || !funk.Contains(config.GConfig.Mitmproxy.FilterSuffix, ext)
+	allowed := ext == "" || !funk.Contains(config.GConfig.Mitmproxy.FilterSuffix, ext)
+
+	logger.Debug("后缀检查",
+		zap.String("path", f.Request.URL.Path),
+		zap.String("ext", ext),
+		zap.Strings("filter_suffix", config.GConfig.Mitmproxy.FilterSuffix),
+		zap.Bool("allowed", allowed))
+
+	return allowed
 }
 
 func NewInfoAddon(config *models.Config, task *scan.Task, filterList []string) *InfoAddon {
@@ -72,11 +100,32 @@ func (IA *InfoAddon) Response(f *proxy.Flow) {
 	if f.Request.Method == "CONNECT" {
 		return
 	} //skip CONNECT request
-	if isDomainAllowed(f) && isSuffixAllowed(f) { // total white host
-		distrib(f, IA.task)
-	}
-}
 
-func SomeFunction(newConfig models.MitmproxyConfig) {
-	// 使用 newConfig
+	logger.Info("收到新的响应",
+		zap.String("host", f.Request.URL.Host),
+		zap.String("url", f.Request.URL.String()))
+
+	domainAllowed := isDomainAllowed(f)
+	suffixAllowed := isSuffixAllowed(f)
+
+	logger.Info("响应过滤结果",
+		zap.String("host", f.Request.URL.Host),
+		zap.String("url", f.Request.URL.String()),
+		zap.Bool("domain_allowed", domainAllowed),
+		zap.Bool("suffix_allowed", suffixAllowed))
+
+	if domainAllowed && suffixAllowed {
+		logger.Info("开始处理响应",
+			zap.String("host", f.Request.URL.Host))
+
+		distrib(f, IA.task)
+
+		logger.Info("响应处理完成",
+			zap.String("host", f.Request.URL.Host))
+	} else {
+		logger.Debug("响应被过滤",
+			zap.String("host", f.Request.URL.Host),
+			zap.String("path", f.Request.URL.Path),
+			zap.String("content-type", f.Response.Header.Get("Content-Type")))
+	}
 }

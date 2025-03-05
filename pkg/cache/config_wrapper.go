@@ -21,7 +21,7 @@ func NewConfigWrapper(manager *RedisManager) *ConfigWrapper {
 // LoadConfig 从Redis加载配置
 func (cw *ConfigWrapper) LoadConfig() (*models.Config, error) {
 	// 1. 尝试从Redis加载
-	data, err := cw.manager.client.Get(ConfigKey)
+	data, err := cw.manager.Client.Get(ConfigKey)
 	if err != nil {
 		logger.Debug("从Redis加载配置失败，将使用内存配置", zap.Error(err))
 		return cw.config.LoadConfig()
@@ -51,7 +51,7 @@ func (cw *ConfigWrapper) SaveConfig(config *models.Config) error {
 	}
 
 	// 3. 保存到Redis
-	return cw.manager.client.Set(ConfigKey, data)
+	return cw.manager.Client.Set(ConfigKey, data)
 }
 
 // WatchConfig 监听配置变更

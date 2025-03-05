@@ -1,6 +1,7 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import ScanResults from '../components/ScanResults.vue'
 import FilterConfig from '../components/FilterConfig.vue'
+import LogViewer from '../components/LogViewer.vue'
 
 const routes = [
     {
@@ -16,6 +17,11 @@ const routes = [
         path: '/config/filter',
         name: 'FilterConfig',
         component: FilterConfig
+    },
+    {
+        path: '/logs',
+        name: 'LogViewer',
+        component: LogViewer
     }
 ]
 
