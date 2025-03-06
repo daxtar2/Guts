@@ -33,8 +33,8 @@ func main() {
 	config.GConfig.CaConfig.CaRootPath = certDir
 
 	// 4. 创建并启动API服务
-	server := api.NewServer(config.RedisAddr)
-	logger.Info("API服务创建完成", zap.String("redis_addr", config.RedisAddr))
+	server := api.NewServer(config.GConfig.Redis.Address)
+	logger.Info("API服务创建完成", zap.String("redis_addr", config.GConfig.Redis.Address))
 
 	// 5. 启动代理服务（在后台运行）
 	go func() {

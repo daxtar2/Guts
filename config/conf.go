@@ -28,7 +28,7 @@ func InitConfig() error {
 // loadConfig 从文件加载配置
 func loadConfig() error {
 	// 1. 设置默认配置
-	setDefaultConfig()
+	//setDefaultConfig()
 
 	// 2. 读取配置文件
 	viper.SetConfigFile("./config/config.yaml")
@@ -45,32 +45,32 @@ func loadConfig() error {
 	}
 
 	// 4. 保存Redis地址
-	RedisAddr = GConfig.Redis.Address
+	//RedisAddr = GConfig.Redis.Address
 
 	return nil
 }
 
 // setDefaultConfig 设置默认配置
-func setDefaultConfig() {
-	viper.SetDefault("mitmproxy.addr_port", ":9080")
-	viper.SetDefault("mitmproxy.ssl_insecure", true)
-	viper.SetDefault("mitmproxy.include_domain", []string{})
-	viper.SetDefault("mitmproxy.exclude_domain", []string{
-		"github.com", "github.io", "github.com.cn", "github.io.cn", "baidu.com",
-	})
-	viper.SetDefault("mitmproxy.filter_suffix", []string{
-		".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2",
-	})
-	viper.SetDefault("redis.address", "127.0.0.1:6379")
-	viper.SetDefault("caconfig.ca_root_path", "./certs/")
+// func setDefaultConfig() {
+// 	viper.SetDefault("mitmproxy.addr_port", ":9080")
+// 	viper.SetDefault("mitmproxy.ssl_insecure", true)
+// 	viper.SetDefault("mitmproxy.include_domain", []string{})
+// 	viper.SetDefault("mitmproxy.exclude_domain", []string{
+// 		"github.com", "github.io", "github.com.cn", "github.io.cn", "baidu.com",
+// 	})
+// 	viper.SetDefault("mitmproxy.filter_suffix", []string{
+// 		".css", ".js", ".png", ".jpg", ".jpeg", ".gif", ".ico", ".woff", ".woff2",
+// 	})
+// 	viper.SetDefault("redis.address", "127.0.0.1:6379")
+// 	viper.SetDefault("caconfig.ca_root_path", "./certs/")
 
-	// 确保配置文件存在
-	if err := viper.SafeWriteConfig(); err != nil {
-		if _, ok := err.(viper.ConfigFileAlreadyExistsError); !ok {
-			logger.Error("创建默认配置文件失败", zap.Error(err))
-		}
-	}
-}
+// 	// 确保配置文件存在
+// 	if err := viper.SafeWriteConfig(); err != nil {
+// 		if _, ok := err.(viper.ConfigFileAlreadyExistsError); !ok {
+// 			logger.Error("创建默认配置文件失败", zap.Error(err))
+// 		}
+// 	}
+// }
 
 // SaveConfigToFile 保存配置到文件
 func SaveConfigToFile(config *models.Config) error {
@@ -102,4 +102,17 @@ func GetConfig() *models.Config {
 		HeaderMap: GConfig.HeaderMap,
 		CaConfig:  GConfig.CaConfig,
 	}
+}
+
+func SaveTemplateConfigToFile(templateFiltersConfig *models.TemplateFilterConfig) error {
+	GConfig.TemplateFilter = *templateFiltersConfig
+	// 将配置写入viper
+	viper.Set("templatefilters", GConfig.TemplateFilter)
+
+	// 写入文件
+	if err := viper.WriteConfig(); err != nil {
+		return fmt.Errorf("保存模板配置到文件失败: %v", err)
+	}
+
+	return nil
 }

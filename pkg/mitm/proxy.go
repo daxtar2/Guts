@@ -13,7 +13,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func NewMitmproxy() {
+func NewMitmproxy() error {
 
 	certDir := config.GConfig.CaConfig.CaRootPath
 
@@ -45,9 +45,17 @@ func NewMitmproxy() {
 	}
 	globalTask.Wg.Add(1) // 堵塞进程，防止提前退出
 
+	// 获取代理端口配置
+	proxyPort := config.GConfig.Mitmproxy.AddrPort
+	if proxyPort == "" {
+		proxyPort = ":9080" // 添加默认端口
+	}
+
+	logger.Info("正在启动代理服务", zap.String("port", proxyPort))
+
 	opts := &proxy.Options{
 		Debug:             0,
-		Addr:              config.GConfig.Mitmproxy.AddrPort,
+		Addr:              proxyPort,
 		StreamLargeBodies: 1024 * 1024 * 5,
 		SslInsecure:       true,
 		CaRootPath:        certDir,
@@ -61,11 +69,15 @@ func NewMitmproxy() {
 
 	infoAddon := NewInfoAddon(config.GConfig, globalTask, config.GConfig.Mitmproxy.FilterSuffix)
 	p.AddAddon(infoAddon)
+
+	// 启动代理服务器
 	go func() {
-		err = p.Start()
-		if err != nil {
+		if err := p.Start(); err != nil {
 			logger.Error("启动代理失败", zap.Error(err))
 		}
 	}()
+
 	globalTask.Wg.Wait()
+
+	return nil
 }

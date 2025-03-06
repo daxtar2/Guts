@@ -1,13 +1,9 @@
 caconfig:
     carootpath: certs
 headermap:
-    headers: {}
     setcookie: []
 mitmproxy:
     addrport: ""
-    sslinsecure: false
-    includedomain:
-        - 124.70.64.48:48519
     excludedomain:
         - github.com
         - baidu.com
@@ -20,6 +16,25 @@ mitmproxy:
         - chaos.com
         - youdao.com
         - microsoft.com
-    filtersuffix: []
+    filtersuffix:
+        - .mp3
+        - .mp4
+        - .js
+    includedomain: []
+    sslinsecure: false
 redis:
     address: 127.0.0.1:6379
+templatefilters:
+    severity: critical,high
+    excludeseverities: ""
+    protocoltypes: ""
+    excludeprotocoltypes: ""
+    authors:
+        - doppel
+    tags:
+        - testnnnn
+    excludetags: []
+    includetags: []
+    ids: []
+    excludeids: []
+    templatecondition: []

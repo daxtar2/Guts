@@ -12,7 +12,7 @@ import (
 	"github.com/daxtar2/Guts/pkg/cache"
 	"github.com/daxtar2/Guts/pkg/header"
 	"github.com/daxtar2/Guts/pkg/logger"
-	"github.com/daxtar2/Guts/pkg/models" // 引入模型
+	"github.com/daxtar2/Guts/pkg/models"
 	"github.com/panjf2000/ants/v2"
 	nuclei "github.com/projectdiscovery/nuclei/v3/lib"
 	"github.com/projectdiscovery/nuclei/v3/pkg/output"
@@ -26,8 +26,9 @@ type Task struct {
 	Wg            *sync.WaitGroup
 	engine        *nuclei.NucleiEngine
 	results       chan *output.ResultEvent
-	templateCache *cache.RedisClient // 使用 RedisClient
+	templateCache *cache.RedisManager // 使用 RedisManager
 	resultChan    chan *models.ScanResult
+	//done          chan struct{} // 添加一个完成信号通道
 }
 
 // 初始化扫描任务
@@ -55,14 +56,34 @@ func NewTask(maxPoolsize int) (*Task, error) {
 		return nil, fmt.Errorf("模板目录不存在: %s", baseTemplatesPath)
 	}
 
+	// 创建 Redis 客户端
+	redisManager := cache.NewRedisManager(config.GConfig.Redis.Address)
+
+	// 创建配置包装器
+	configWrapper := cache.NewConfigWrapper(redisManager)
+
 	// 设置模板搜索路径
 	templateConfig := config.GetLoaderConfig()
 	templateConfig.Templates = []string{baseTemplatesPath}
 	templateConfig.Workflows = []string{workflowsPath}
 
+	// 从配置包装器获取模板过滤器配置
+	templateFilters := configWrapper.GetTemplateFilters()
+
 	options := []nuclei.NucleiSDKOptions{
-		nuclei.WithTemplateFilters(config.GetTemplateFilters()),
-		nuclei.WithCatalog(templateConfig.Catalog),
+		nuclei.WithTemplateFilters(nuclei.TemplateFilters{
+			Severity:             templateFilters.Severity,
+			ExcludeSeverities:    templateFilters.ExcludeSeverities,
+			ProtocolTypes:        templateFilters.ProtocolTypes,
+			ExcludeProtocolTypes: templateFilters.ExcludeProtocolTypes,
+			Authors:              templateFilters.Authors,
+			Tags:                 templateFilters.Tags,
+			ExcludeTags:          templateFilters.ExcludeTags,
+			IncludeTags:          templateFilters.IncludeTags,
+			IDs:                  templateFilters.IDs,
+			ExcludeIDs:           templateFilters.ExcludeIDs,
+			TemplateCondition:    templateFilters.TemplateCondition,
+		}),
 		nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
 			Templates: []string{
 				filepath.Join(baseTemplatesPath, "cloud"),
@@ -80,7 +101,7 @@ func NewTask(maxPoolsize int) (*Task, error) {
 			Workflows: []string{workflowsPath},
 		}),
 		nuclei.EnableStatsWithOpts(nuclei.StatsOptions{MetricServerPort: 8080}),
-		nuclei.WithGlobalRateLimit(1, time.Second),
+		nuclei.WithGlobalRateLimit(30, time.Second), //速率限制
 		nuclei.WithConcurrency(nuclei.Concurrency{
 			TemplateConcurrency:           100,
 			HostConcurrency:               100,
@@ -117,8 +138,9 @@ func NewTask(maxPoolsize int) (*Task, error) {
 		engine:        engine,
 		results:       make(chan *output.ResultEvent, 100),
 		Wg:            &sync.WaitGroup{},
-		templateCache: cache.NewRedisClient(config.RedisAddr), // 使用 RedisClient
+		templateCache: redisManager,
 		resultChan:    make(chan *models.ScanResult, 100),
+		//done:          make(chan struct{}),
 	}
 
 	// 加载所有模板
@@ -133,20 +155,15 @@ func NewTask(maxPoolsize int) (*Task, error) {
 
 // ScanPassiveResult 执行被动扫描
 func (t *Task) ScanPassiveResult(passiveResult *header.PassiveResult) error {
-	// 添加重试机制
-	retries := 3
-	for i := 0; i < retries; i++ {
-		err := t.executeScan(passiveResult)
-		if err == nil {
-			return nil
-		}
-		logger.Warn("扫描失败，准备重试",
-			zap.String("host", passiveResult.Host),
-			zap.Int("retry", i+1),
-			zap.Error(err))
-		time.Sleep(time.Second * time.Duration(i+1))
+
+	err := t.executeScan(passiveResult)
+	if err != nil {
+		return err
 	}
-	return fmt.Errorf("扫描失败，已重试%d次", retries)
+	logger.Warn("扫描失败，准备重试",
+		zap.String("host", passiveResult.Host),
+		zap.Error(err))
+	return nil
 }
 
 // scanWithTemplatesLoader 从 Redis 加载相关技术栈的模板
@@ -233,7 +250,7 @@ func (t *Task) executeScan(passiveResult *header.PassiveResult) error {
 				}
 
 				// 保存结果到 Redis
-				if err := t.templateCache.SaveScanResult(scanResult); err != nil {
+				if err := t.templateCache.Client.SaveScanResult(scanResult); err != nil {
 					logger.Error("保存扫描结果到 Redis 失败",
 						zap.Error(err),
 						zap.String("target", event.Host),
@@ -285,7 +302,7 @@ func (t *Task) executeScan(passiveResult *header.PassiveResult) error {
 		}
 
 		// 保存无漏洞结果到 Redis
-		if err := t.templateCache.SaveScanResult(noVulnResult); err != nil {
+		if err := t.templateCache.Client.SaveScanResult(noVulnResult); err != nil {
 			logger.Error("保存无漏洞结果到 Redis 失败",
 				zap.Error(err),
 				zap.String("target", passiveResult.Host))

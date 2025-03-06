@@ -49,7 +49,7 @@ func (rm *RedisManager) LoadConfigWrapper() (*ConfigWrapper, error) {
 		}
 	}
 
-	wrapper.config = config
+	wrapper.Config = config
 	logger.Info("ConfigWrapper创建完成", zap.Any("config", config))
 
 	return wrapper, nil
@@ -70,20 +70,14 @@ func (rm *RedisManager) WatchConfig(callback func(ConfigInterface)) {
 	pubsub := rm.Client.Subscribe("config:update")
 	defer pubsub.Close()
 
-	for {
-		msg, err := pubsub.ReceiveMessage(rm.ctx)
-		if err != nil {
-			logger.Error("监听配置变更失败", zap.Error(err))
-			continue
-		}
-
+	for msg := range pubsub.Channel() {
 		var config models.Config
 		if err := json.Unmarshal([]byte(msg.Payload), &config); err != nil {
-			logger.Error("解析配置变更失败", zap.Error(err))
+			logger.Error("解析配置消息失败", zap.Error(err))
 			continue
 		}
 
-		callback(NewConfigWrapper(rm))
+		callback(&config)
 	}
 }
 

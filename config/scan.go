@@ -18,13 +18,6 @@ var TemplateFilters = nuclei.TemplateFilters{
 	Authors:           []string{},
 	Tags: []string{
 		"cve",
-		"rce",
-		"sqli",
-		"xss",
-		"ssrf",
-		"lfi",
-		"rfi",
-		"upload",
 	},
 	ExcludeTags: []string{"dos", "fuzz"},
 	IncludeTags: []string{},
@@ -117,11 +110,6 @@ var LoaderConfig = &loader.Config{
 // 	Protocols:         templateTypes.ProtocolTypes{templateTypes.HTTPProtocol},
 // 	ExcludeProtocols:  templateTypes.ProtocolTypes{},
 // }
-
-// GetTemplateFilters 返回模板过滤器配置
-func GetTemplateFilters() nuclei.TemplateFilters {
-	return TemplateFilters
-}
 
 // GetLoaderConfig 返回模板加载器配置
 func GetLoaderConfig() *loader.Config {

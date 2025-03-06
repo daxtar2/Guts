@@ -7,5 +7,5 @@ import (
 // ConfigInterface 定义配置的基本操作
 type ConfigInterface interface {
 	LoadConfig() (*models.Config, error)
-	SaveConfig(config *models.Config) error
+	SaveConfig(*models.Config) error
 }

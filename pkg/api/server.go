@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"os"
 	"path"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -79,6 +80,18 @@ func NewServer(redisAddr string) *Server {
 
 		// 获取日志文件内容
 		api.GET("/logs/:filename", server.GetLogContent)
+
+		// 获取模板配置
+		api.GET("/config/template", server.GetTemplateConfig)
+
+		// 更新模板配置
+		api.POST("/config/template", server.UpdateTemplateConfig)
+
+		// 模板管理相关路由
+		api.GET("/templates", server.GetTemplatesList)           // 获取模板列表
+		api.GET("/templates/*path", server.GetTemplateContent)   // 获取模板内容
+		api.POST("/templates/*path", server.SaveTemplateContent) // 保存模板内容
+		api.DELETE("/templates/*path", server.DeleteTemplate)    // 删除模板
 	}
 	logger.Info("API路由设置完成")
 
@@ -324,6 +337,250 @@ func (s *Server) GetLogContent(c *gin.Context) {
 			"content":  string(content),
 			"filename": filename,
 		},
+	})
+}
+
+// 获取模板配置
+func (s *Server) GetTemplateConfig(c *gin.Context) {
+	logger.Info("收到获取模板配置请求")
+
+	// 直接从全局配置获取
+	templateConfig := config.GConfig.GetTemplateFilters()
+	logger.Info("返回模板配置", zap.Any("config", templateConfig))
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data":   gin.H{"templateConfig": templateConfig},
+	})
+}
+
+// 更新模板配置
+func (s *Server) UpdateTemplateConfig(c *gin.Context) {
+	var newConfig models.TemplateFilterConfig
+	if err := c.BindJSON(&newConfig); err != nil {
+		logger.Error("解析模板配置JSON失败", zap.Error(err))
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 更新内存中的配置
+	config.GConfig.TemplateFilter = newConfig
+
+	// 保存到配置文件
+	if err := config.SaveTemplateConfigToFile(&newConfig); err != nil {
+		c.JSON(500, gin.H{"error": "Failed to save config to file"})
+		return
+	}
+
+	// 保存到 Redis
+	if err := s.redisManager.SaveConfig(config.GConfig); err != nil {
+		logger.Error("保存配置到Redis失败", zap.Error(err))
+		// 继续执行，不返回错误
+	}
+
+	logger.Info("模板配置更新成功", zap.Any("new_config", newConfig))
+
+	c.JSON(200, gin.H{
+		"status":  "success",
+		"message": "Template configuration updated",
+	})
+}
+
+// GetTemplatesList 获取模板列表
+func (s *Server) GetTemplatesList(c *gin.Context) {
+	dirPath := c.Query("path")
+	if dirPath == "" {
+		dirPath = "templates"
+	}
+
+	// 获取完整路径
+	fullPath := filepath.Join(".", dirPath)
+
+	// 读取目录内容
+	entries, err := os.ReadDir(fullPath)
+	if err != nil {
+		logger.Error("读取模板目录失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to read templates directory",
+		})
+		return
+	}
+
+	var items []gin.H
+	for _, entry := range entries {
+		item := gin.H{
+			"name":  entry.Name(),
+			"isDir": entry.IsDir(),
+			"path":  filepath.Join(dirPath, entry.Name()),
+		}
+
+		if !entry.IsDir() {
+			// 如果是文件，检查是否是 YAML 文件
+			if strings.HasSuffix(entry.Name(), ".yaml") || strings.HasSuffix(entry.Name(), ".yml") {
+				items = append(items, item)
+			}
+		} else {
+			items = append(items, item)
+		}
+	}
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data":   items,
+	})
+}
+
+// GetTemplateContent 获取模板内容
+func (s *Server) GetTemplateContent(c *gin.Context) {
+	filePath := c.Param("path")
+	if filePath == "" {
+		c.JSON(400, gin.H{
+			"status":  "error",
+			"message": "Path parameter is required",
+		})
+		return
+	}
+
+	// 获取完整路径
+	fullPath := filepath.Join(".", filePath)
+
+	// 读取文件内容
+	content, err := os.ReadFile(fullPath)
+	if err != nil {
+		logger.Error("读取模板文件失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to read template file",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"content": string(content),
+			"path":    filePath,
+		},
+	})
+}
+
+// SaveTemplateContent 保存模板内容
+func (s *Server) SaveTemplateContent(c *gin.Context) {
+	filePath := c.Param("path")
+	if filePath == "" {
+		c.JSON(400, gin.H{
+			"status":  "error",
+			"message": "Path parameter is required",
+		})
+		return
+	}
+
+	var req struct {
+		Content     string `json:"content"`
+		IsDirectory bool   `json:"isDirectory"`
+	}
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{
+			"status":  "error",
+			"message": "Invalid request body",
+		})
+		return
+	}
+
+	// 获取完整路径
+	fullPath := filepath.Join(".", filePath)
+
+	// 如果是目录
+	if req.IsDirectory {
+		if err := os.MkdirAll(fullPath, 0755); err != nil {
+			logger.Error("创建目录失败", zap.Error(err))
+			c.JSON(500, gin.H{
+				"status":  "error",
+				"message": "Failed to create directory",
+			})
+			return
+		}
+		c.JSON(200, gin.H{
+			"status":  "success",
+			"message": "Directory created successfully",
+		})
+		return
+	}
+
+	// 确保父目录存在
+	parentDir := filepath.Dir(fullPath)
+	if err := os.MkdirAll(parentDir, 0755); err != nil {
+		logger.Error("创建父目录失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to create parent directory",
+		})
+		return
+	}
+
+	// 保存文件内容
+	if err := os.WriteFile(fullPath, []byte(req.Content), 0644); err != nil {
+		logger.Error("保存模板文件失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to save template file",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"status":  "success",
+		"message": "Template saved successfully",
+	})
+}
+
+// DeleteTemplate 删除模板文件或目录
+func (s *Server) DeleteTemplate(c *gin.Context) {
+	filePath := c.Param("path")
+	if filePath == "" {
+		c.JSON(400, gin.H{
+			"status":  "error",
+			"message": "Path parameter is required",
+		})
+		return
+	}
+
+	// 获取完整路径
+	fullPath := filepath.Join(".", filePath)
+
+	// 检查是否是目录
+	fileInfo, err := os.Stat(fullPath)
+	if err != nil {
+		logger.Error("获取文件信息失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to get file info",
+		})
+		return
+	}
+
+	var err error
+	if fileInfo.IsDir() {
+		// 删除目录
+		err = os.RemoveAll(fullPath)
+	} else {
+		// 删除文件
+		err = os.Remove(fullPath)
+	}
+
+	if err != nil {
+		logger.Error("删除失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to delete",
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"status":  "success",
+		"message": "Deleted successfully",
 	})
 }
 

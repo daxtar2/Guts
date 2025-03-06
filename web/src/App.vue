@@ -11,6 +11,12 @@
         <el-menu-item index="/logs">
           日志查看
         </el-menu-item>
+        <el-menu-item index="/config/template">
+          模板配置
+        </el-menu-item>
+        <el-menu-item index="/templates">
+          模板管理
+        </el-menu-item>
       </el-menu>
     </el-aside>
     <el-main>
