@@ -1,0 +1,49 @@
+id: wordpress-classic-editor
+
+info:
+  name: Classic Editor Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/classic-editor/
+  metadata:
+    plugin_namespace: classic-editor
+    wpscan: https://wpscan.com/plugin/classic-editor
+  tags: tech,wordpress,wp-plugin,top-100,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/classic-editor/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/classic-editor.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4a0a00473045022011dd5f347b8788d2c50a8503bc035a6a2ef210207be6f79dc35b4dfc118c4457022100ca6611342b34956a805915ce4cf387392a6baff7a6218d7480e7ba88a18918e2:922c64590222798bb761d5b6d8e72950

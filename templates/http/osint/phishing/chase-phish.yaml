@@ -1,0 +1,35 @@
+id: Chase-phish
+
+info:
+  name: Chase phishing Detection
+  author: rxerium
+  severity: info
+  description: |
+    A Chase phishing website was detected
+  reference:
+    - https://chase.com
+  metadata:
+    max-request: 1
+  tags: phishing,Chase,osint
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}"
+
+    host-redirects: true
+    max-redirects: 2
+
+    matchers-condition: and
+    matchers:
+      - type: word
+        words:
+          - 'Credit Card, Mortgage, Banking, Auto | Chase Online | Chase.com'
+
+      - type: status
+        status:
+          - 200
+
+      - type: dsl
+        dsl:
+          - '!contains(host,"chase.com")'
+# digest: 4b0a00483046022100ae35f978b9578e6858f301c73b2c4399e7af1a6cfd5367ae21fed07d7a5792f2022100a2d7113ea6256d550c73018e28a0e0c192ef27bc3e0dad78f065222d6e92cd37:922c64590222798bb761d5b6d8e72950

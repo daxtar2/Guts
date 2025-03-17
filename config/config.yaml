@@ -1,0 +1,43 @@
+caconfig:
+    carootpath: certs
+headermap:
+    setcookie: []
+mitmproxy:
+    addr_port: :7777
+    excludedomain:
+        - github.com
+        - baidu.com
+        - wetab.link
+        - avatars.githubusercontent.com
+        - cn.bing.com
+        - api.wetab.link
+        - luna-ai.youdao.com
+        - www.bilibili.com
+        - chaos.com
+        - youdao.com
+        - microsoft.com
+        - gator.volces.com
+        - www.google-analytics.com
+        - api-static.aippt.cn
+    filtersuffix:
+        - .mp3
+        - .mp4
+        - .js
+    includedomain: []
+    sslinsecure: false
+redis:
+    address: 127.0.0.1:6379
+templatefilters:
+    severity: high
+    excludeseverities: critical,medium,low,info
+    protocoltypes: http
+    excludeprotocoltypes: ""
+    authors: []
+    tags:
+        - rails
+    excludetags: []
+    includetags: []
+    ids: []
+    excludeids: []
+    templatecondition: []
+    enablecheck: false

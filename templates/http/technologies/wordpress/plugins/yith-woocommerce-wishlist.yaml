@@ -1,0 +1,49 @@
+id: wordpress-yith-woocommerce-wishlist
+
+info:
+  name: YITH WooCommerce Wishlist Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/yith-woocommerce-wishlist/
+  metadata:
+    plugin_namespace: yith-woocommerce-wishlist
+    wpscan: https://wpscan.com/plugin/yith-woocommerce-wishlist
+  tags: tech,wordpress,wp-plugin,top-100,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/yith-woocommerce-wishlist/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/yith-woocommerce-wishlist.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4b0a00483046022100c70ef5204dd078ccf4474e8a3f67214e2bc60d2591514a107748c7f04bb8b8ed022100b85bbb6c3e45f737a9ff2ec0c196b76c02e75cabe92f40d3da16d4cd5d3bdd8b:922c64590222798bb761d5b6d8e72950

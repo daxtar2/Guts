@@ -1,0 +1,49 @@
+id: wordpress-woocommerce-payments
+
+info:
+  name: WooPayments' Integrated WooCommerce Payments Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/woocommerce-payments/
+  metadata:
+    plugin_namespace: woocommerce-payments
+    wpscan: https://wpscan.com/plugin/woocommerce-payments
+  tags: tech,wordpress,wp-plugin,top-100,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/woocommerce-payments/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/woocommerce-payments.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4a0a0047304502205d14f11084df627402d602189ecf2166304e9c21ce4d9fb16b7783b4ff6b4af8022100889e76326776a066014665002f571e995147fc97c72dc6aa436f72f5d6fbfaf3:922c64590222798bb761d5b6d8e72950

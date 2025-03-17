@@ -1,0 +1,49 @@
+id: wordpress-breeze
+
+info:
+  name: Breeze – WordPress Cache Plugin Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/breeze/
+  metadata:
+    plugin_namespace: breeze
+    wpscan: https://wpscan.com/plugin/breeze
+  tags: tech,wordpress,wp-plugin,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/breeze/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/breeze.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 4a0a00473045022056e680c9b0391f12969cad224d8bcb1f328de7149ba193a227de34a6bcc6821f022100ccc0e1ba31575d24627b82454cdaf7d7f9cd81e5d6472021fcb8af33136dc988:922c64590222798bb761d5b6d8e72950

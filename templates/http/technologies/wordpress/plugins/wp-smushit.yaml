@@ -1,0 +1,49 @@
+id: wordpress-wp-smushit
+
+info:
+  name: Smush Image Optimization – Optimize Images | Compress & Lazy Load Images | Convert WebP | Image CDN Detection
+  author: ricardomaia
+  severity: info
+  reference:
+    - https://wordpress.org/plugins/wp-smushit/
+  metadata:
+    plugin_namespace: wp-smushit
+    wpscan: https://wpscan.com/plugin/wp-smushit
+  tags: tech,wordpress,wp-plugin,top-100,top-200
+
+http:
+  - method: GET
+    path:
+      - "{{BaseURL}}/wp-content/plugins/wp-smushit/readme.txt"
+
+    payloads:
+      last_version: helpers/wordpress/plugins/wp-smushit.txt
+
+    extractors:
+      - type: regex
+        part: body
+        internal: true
+        name: internal_detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+      - type: regex
+        part: body
+        name: detected_version
+        group: 1
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+
+    matchers-condition: or
+    matchers:
+      - type: dsl
+        name: "outdated_version"
+        dsl:
+          - compare_versions(internal_detected_version, concat("< ", last_version))
+
+      - type: regex
+        part: body
+        regex:
+          - '(?i)Stable.tag:\s?([\w.]+)'
+# digest: 490a00463044022053b9f05195fdcc52868303264fd0d2dd187b79032de3866f9ce6ea08fab2cfc602203377efff6e262d5c3ebfd5128df90b18c21b51d2d5f05658d64b0bc5e49f1128:922c64590222798bb761d5b6d8e72950
