@@ -1,10 +1,14 @@
 caconfig:
     carootpath: certs
 headermap:
+    headers: {}
     setcookie: []
 mitmproxy:
-    addr_port: :7777
+    addrport: ""
+    sslinsecure: false
+    includedomain: []
     excludedomain:
+        - bilibili.com
         - github.com
         - baidu.com
         - wetab.link
@@ -13,18 +17,12 @@ mitmproxy:
         - api.wetab.link
         - luna-ai.youdao.com
         - www.bilibili.com
-        - chaos.com
         - youdao.com
         - microsoft.com
         - gator.volces.com
-        - www.google-analytics.com
         - api-static.aippt.cn
     filtersuffix:
-        - .mp3
-        - .mp4
         - .js
-    includedomain: []
-    sslinsecure: false
 redis:
     address: 127.0.0.1:6379
 templatefilters:

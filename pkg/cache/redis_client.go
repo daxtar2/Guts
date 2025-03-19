@@ -51,7 +51,7 @@ func (r *RedisClient) SaveScanResult(result *models.ScanResult) error {
 }
 
 // GetScanResults 获取扫描结果，支持时间过滤
-func (r *RedisClient) GetScanResults(page, pageSize int) ([]*models.ScanResult, int64, error) {
+func (r *RedisClient) GetScanResultsByPage(page, pageSize int) ([]*models.ScanResult, int64, error) {
 	// 获取所有结果键
 	keys, err := r.client.SMembers(context.Background(), "scan_results_index").Result()
 	if err != nil {

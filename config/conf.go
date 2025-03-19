@@ -2,10 +2,12 @@ package config
 
 import (
 	"fmt"
+	"path/filepath"
 	"sync"
 
 	"github.com/daxtar2/Guts/pkg/logger"
 	"github.com/daxtar2/Guts/pkg/models"
+	"github.com/fsnotify/fsnotify"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -21,6 +23,9 @@ func InitConfig() error {
 	var err error
 	once.Do(func() {
 		err = loadConfig()
+		if err == nil {
+			go watchConfig()
+		}
 	})
 	return err
 }
@@ -28,7 +33,7 @@ func InitConfig() error {
 // loadConfig 从文件加载配置
 func loadConfig() error {
 	// 1. 设置默认配置
-	//setDefaultConfig()
+	setDefaultConfig()
 
 	// 2. 读取配置文件
 	viper.SetConfigFile("./config/config.yaml")
@@ -44,10 +49,52 @@ func loadConfig() error {
 		return fmt.Errorf("解析配置文件失败: %v", err)
 	}
 
-	// 4. 保存Redis地址
-	//RedisAddr = GConfig.Redis.Address
+	// 4. 确保所有字段都被正确加载
+	if GConfig.Mitmproxy.FilterSuffix == nil {
+		GConfig.Mitmproxy.FilterSuffix = []string{}
+	}
+	if GConfig.Mitmproxy.IncludeDomain == nil {
+		GConfig.Mitmproxy.IncludeDomain = []string{}
+	}
+	if GConfig.Mitmproxy.ExcludeDomain == nil {
+		GConfig.Mitmproxy.ExcludeDomain = []string{}
+	}
+
+	// 5. 记录加载的配置
+	logger.Info("配置加载成功",
+		zap.Any("mitmproxy", GConfig.Mitmproxy),
+		zap.Any("headerMap", GConfig.HeaderMap),
+		zap.Any("caConfig", GConfig.CaConfig),
+		zap.Any("redis", GConfig.Redis),
+		zap.Any("templateFilter", GConfig.TemplateFilter),
+	)
 
 	return nil
+}
+
+// watchConfig 监控配置文件变化
+func watchConfig() {
+	viper.WatchConfig()
+	viper.OnConfigChange(func(e fsnotify.Event) {
+		logger.Info("配置文件发生变化，重新加载",
+			zap.String("file", e.Name),
+			zap.String("operation", e.Op.String()),
+		)
+
+		// 重新加载配置
+		if err := loadConfig(); err != nil {
+			logger.Error("重新加载配置失败", zap.Error(err))
+		} else {
+			// 记录重新加载后的配置
+			logger.Info("配置重新加载成功",
+				zap.Any("mitmproxy", GConfig.Mitmproxy),
+				zap.Any("headerMap", GConfig.HeaderMap),
+				zap.Any("caConfig", GConfig.CaConfig),
+				zap.Any("redis", GConfig.Redis),
+				zap.Any("templateFilter", GConfig.TemplateFilter),
+			)
+		}
+	})
 }
 
 // SaveConfigToFile 保存配置到文件
@@ -60,11 +107,21 @@ func SaveConfigToFile(config *models.Config) error {
 	viper.Set("headermap", config.HeaderMap)
 	viper.Set("caconfig", config.CaConfig)
 	viper.Set("redis", config.Redis)
+	viper.Set("templatefilters", config.TemplateFilter)
 
 	// 写入文件
 	if err := viper.WriteConfig(); err != nil {
 		return fmt.Errorf("保存配置到文件失败: %v", err)
 	}
+
+	// 记录保存的配置
+	logger.Info("配置已保存到文件",
+		zap.Any("mitmproxy", config.Mitmproxy),
+		zap.Any("headerMap", config.HeaderMap),
+		zap.Any("caConfig", config.CaConfig),
+		zap.Any("redis", config.Redis),
+		zap.Any("templateFilter", config.TemplateFilter),
+	)
 
 	return nil
 }
@@ -98,4 +155,28 @@ func SaveTemplateConfigToFile(templateFiltersConfig *models.TemplateFilterConfig
 // TemplateUpdate 模板更新配置
 type TemplateUpdate struct {
 	EnableCheck bool `mapstructure:"update_enable_check"` // 是否启用更新检查
+}
+
+// GetTemplateBasePath 获取模板基础目录的绝对路径
+func GetTemplateBasePath() string {
+	// 默认使用相对于执行文件的templates目录
+	templatesDir := "./templates"
+
+	// 获取绝对路径，避免不同OS路径问题
+	absPath, err := filepath.Abs(templatesDir)
+	if err != nil {
+		logger.Warn("获取模板绝对路径失败，使用相对路径", zap.Error(err))
+		return templatesDir
+	}
+
+	return absPath
+}
+
+// setDefaultConfig 设置默认配置
+func setDefaultConfig() {
+	viper.SetDefault("mitmproxy.filtersuffix", []string{})
+	viper.SetDefault("mitmproxy.includedomain", []string{})
+	viper.SetDefault("mitmproxy.excludedomain", []string{})
+	viper.SetDefault("mitmproxy.addr_port", "7777")
+	viper.SetDefault("mitmproxy.ssl_insecure", false)
 }

@@ -25,6 +25,7 @@ var TemplateFilters = nuclei.TemplateFilters{
 	ExcludeIDs:  []string{},
 }
 
+// 初始化配置，后续会更新为绝对路径
 var DefaultConfig = &types.Options{
 	Templates:                []string{"./templates"},
 	NewTemplatesDirectory:    "./templates",
@@ -47,7 +48,9 @@ var DefaultConfig = &types.Options{
 	IncludeConditions:        []string{},
 }
 
-var catalog = disk.NewCatalog(DefaultConfig.NewTemplatesDirectory)
+// 初始化为nil，后续会在更新模板路径后再创建
+var catalog *disk.DiskCatalog
+var LoaderConfig *loader.Config
 
 var ExecutorOptions = protocols.ExecutorOptions{
 	Options: &types.Options{
@@ -73,45 +76,43 @@ var ExecutorOptions = protocols.ExecutorOptions{
 	},
 }
 
-var LoaderConfig = &loader.Config{
-	Templates:    DefaultConfig.Templates,
-	WorkflowURLs: DefaultConfig.WorkflowURLs,
-	Workflows:    DefaultConfig.Workflows,
+// 初始化模板加载配置
+func InitTemplateLoader() {
+	// 获取模板目录的绝对路径
+	templatesPath := GetTemplateBasePath()
 
-	// 添加必要的过滤器配置
-	Tags:              DefaultConfig.Tags,
-	ExcludeTags:       DefaultConfig.ExcludeTags,
-	Authors:           DefaultConfig.Authors,
-	Severities:        DefaultConfig.Severities,
-	ExcludeSeverities: DefaultConfig.ExcludeSeverities,
-	IncludeIds:        DefaultConfig.IncludeIds,
-	ExcludeIds:        DefaultConfig.ExcludeIds,
-	Protocols:         DefaultConfig.Protocols,
-	Catalog:           catalog,
-	ExcludeProtocols:  DefaultConfig.ExcludeProtocols,
+	// 更新配置中的模板路径
+	DefaultConfig.Templates = []string{templatesPath}
+	DefaultConfig.NewTemplatesDirectory = templatesPath
+
+	// 使用更新后的路径创建目录扫描器
+	catalog = disk.NewCatalog(DefaultConfig.NewTemplatesDirectory)
+
+	// 创建加载器配置
+	LoaderConfig = &loader.Config{
+		Templates:    DefaultConfig.Templates,
+		WorkflowURLs: DefaultConfig.WorkflowURLs,
+		Workflows:    DefaultConfig.Workflows,
+
+		// 添加必要的过滤器配置
+		Tags:              DefaultConfig.Tags,
+		ExcludeTags:       DefaultConfig.ExcludeTags,
+		Authors:           DefaultConfig.Authors,
+		Severities:        DefaultConfig.Severities,
+		ExcludeSeverities: DefaultConfig.ExcludeSeverities,
+		IncludeIds:        DefaultConfig.IncludeIds,
+		ExcludeIds:        DefaultConfig.ExcludeIds,
+		Protocols:         DefaultConfig.Protocols,
+		Catalog:           catalog,
+		ExcludeProtocols:  DefaultConfig.ExcludeProtocols,
+	}
 }
-
-// LoaderConfig 定义模板加载器配置
-// var LoaderConfig1 = &loader.Config{
-// 	Templates:    []string{"nuclei-templates"},
-// 	TemplateURLs: []string{},
-// 	Workflows:    []string{},
-// 	WorkflowURLs: []string{},
-
-// 	// 过滤配置
-// 	Tags:              []string{"xss", "rce"},
-// 	ExcludeTags:       []string{"slow"},
-// 	IncludeTags:       []string{"critical"},
-// 	Authors:           []string{"admin", "security_team"},
-// 	Severities:        severity.Severities{severity.High, severity.Critical},
-// 	ExcludeSeverities: severity.Severities{severity.Low, severity.Info},
-// 	IncludeIds:        []string{},
-// 	ExcludeIds:        []string{},
-// 	Protocols:         templateTypes.ProtocolTypes{templateTypes.HTTPProtocol},
-// 	ExcludeProtocols:  templateTypes.ProtocolTypes{},
-// }
 
 // GetLoaderConfig 返回模板加载器配置
 func GetLoaderConfig() *loader.Config {
+	// 确保LoaderConfig已初始化
+	if LoaderConfig == nil {
+		InitTemplateLoader()
+	}
 	return LoaderConfig
 }

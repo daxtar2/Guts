@@ -100,12 +100,3 @@ func (rm *RedisManager) GetScanResult(id string) (*models.ScanResult, error) {
 	}
 	return result, nil
 }
-
-// ClearAllScanResults 清除所有扫描结果
-func (m *RedisManager) ClearAllScanResults() error {
-	if m.Client == nil {
-		return fmt.Errorf("Redis 客户端未初始化")
-	}
-
-	return m.Client.ClearAllScanResults()
-}

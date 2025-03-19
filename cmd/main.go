@@ -35,6 +35,10 @@ func main() {
 	}
 	config.GConfig.CaConfig.CaRootPath = certDir
 
+	// 3.1 初始化模板加载器
+	config.InitTemplateLoader()
+	logger.Info("模板加载器初始化完成", zap.String("templates_path", config.GetTemplateBasePath()))
+
 	// 4. 创建并启动API服务
 	server := api.NewServer(config.GConfig.Redis.Address)
 	logger.Info("API服务创建完成", zap.String("redis_addr", config.GConfig.Redis.Address))
@@ -60,6 +64,7 @@ func main() {
 		if scanTask != nil {
 			scanTask.Close()
 		}
+
 		logger.Info("扫描任务已关闭")
 		os.Exit(0)
 	}()

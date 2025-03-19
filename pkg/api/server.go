@@ -112,7 +112,7 @@ func (s *Server) GetScanResults(c *gin.Context) {
 		zap.Int("pageSize", pageSize))
 
 	// 从Redis获取结果
-	results, total, err := s.redisManager.Client.GetScanResults(page, pageSize)
+	results, total, err := s.redisManager.Client.GetScanResultsByPage(page, pageSize)
 	if err != nil {
 		logger.Error("获取扫描结果失败", zap.Error(err))
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -151,7 +151,45 @@ func (s *Server) GetScanResultDetail(c *gin.Context) {
 	})
 }
 
-// 更新流量过滤配置
+// GetFilterConfig 获取当前过滤配置
+func (s *Server) GetFilterConfig(c *gin.Context) {
+	logger.Info("收到获取配置请求")
+
+	// 确保配置已加载
+	if config.GConfig == nil {
+		logger.Error("全局配置为空")
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Configuration not initialized",
+		})
+		return
+	}
+
+	// 构建返回数据
+	responseData := gin.H{
+		"includedomain": config.GConfig.Mitmproxy.IncludeDomain,
+		"excludedomain": config.GConfig.Mitmproxy.ExcludeDomain,
+		"filtersuffix":  config.GConfig.Mitmproxy.FilterSuffix,
+		"addr_port":     config.GConfig.Mitmproxy.AddrPort,
+		"ssl_insecure":  config.GConfig.Mitmproxy.SslInsecure,
+	}
+
+	// 记录详细的配置信息
+	logger.Info("返回过滤配置",
+		zap.Any("includedomain", responseData["includedomain"]),
+		zap.Any("excludedomain", responseData["excludedomain"]),
+		zap.Any("filtersuffix", responseData["filtersuffix"]),
+		zap.String("addr_port", responseData["addr_port"].(string)),
+		zap.Bool("ssl_insecure", responseData["ssl_insecure"].(bool)),
+	)
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data":   responseData,
+	})
+}
+
+// UpdateFilterConfig 更新流量过滤配置
 func (s *Server) UpdateFilterConfig(c *gin.Context) {
 	var newConfig models.MitmproxyConfig
 	if err := c.ShouldBindJSON(&newConfig); err != nil {
@@ -160,80 +198,52 @@ func (s *Server) UpdateFilterConfig(c *gin.Context) {
 		return
 	}
 
+	// 记录接收到的配置
+	logger.Info("收到新的过滤配置",
+		zap.Any("includedomain", newConfig.IncludeDomain),
+		zap.Any("excludedomain", newConfig.ExcludeDomain),
+		zap.Any("filtersuffix", newConfig.FilterSuffix),
+		zap.String("addr_port", newConfig.AddrPort),
+		zap.Bool("ssl_insecure", newConfig.SslInsecure),
+	)
+
+	// 确保所有字段都有值
+	if newConfig.FilterSuffix == nil {
+		newConfig.FilterSuffix = []string{}
+	}
+	if newConfig.IncludeDomain == nil {
+		newConfig.IncludeDomain = []string{}
+	}
+	if newConfig.ExcludeDomain == nil {
+		newConfig.ExcludeDomain = []string{}
+	}
+
 	// 更新内存中的配置
 	config.GConfig.Mitmproxy = newConfig
 
-	// 保存到 Redis
-	if err := s.redisManager.SaveConfig(config.GConfig); err != nil {
-		c.JSON(500, gin.H{"error": "Failed to save config to Redis"})
-		return
-	}
-
 	// 保存到配置文件
 	if err := config.SaveConfigToFile(config.GConfig); err != nil {
+		logger.Error("保存配置到文件失败", zap.Error(err))
 		c.JSON(500, gin.H{"error": "Failed to save config to file"})
 		return
 	}
 
-	// 发布配置更新通知
-	if err := s.redisManager.PublishUpdate(config.GConfig); err != nil {
-		c.JSON(500, gin.H{"error": "Failed to publish config update"})
-		return
-	}
-
+	// 记录配置更新成功
 	logger.Info("配置更新成功",
 		zap.Any("new_config", newConfig),
 		zap.String("client_ip", c.ClientIP()),
 	)
 
+	// 返回更新后的配置
 	c.JSON(200, gin.H{
 		"status":  "success",
 		"message": "Filter configuration updated",
-	})
-}
-
-// GetFilterConfig 获取当前过滤配置
-func (s *Server) GetFilterConfig(c *gin.Context) {
-	logger.Info("收到获取配置请求")
-
-	// 首先尝试从 Redis 获取配置
-	configWrapper, err := s.redisManager.LoadConfigWrapper()
-	if err != nil {
-		logger.Warn("从Redis加载配置失败，将使用全局配置", zap.Error(err))
-		// 使用全局配置
-		c.JSON(200, gin.H{
-			"status": "success",
-			"data": gin.H{
-				"includedomain": config.GConfig.Mitmproxy.IncludeDomain,
-				"excludedomain": config.GConfig.Mitmproxy.ExcludeDomain,
-				"filtersuffix":  config.GConfig.Mitmproxy.FilterSuffix,
-				"addr_port":     config.GConfig.Mitmproxy.AddrPort,
-				"ssl_insecure":  config.GConfig.Mitmproxy.SslInsecure,
-			},
-		})
-		return
-	}
-
-	// 从ConfigWrapper获取配置
-	conf, err := configWrapper.LoadConfig()
-	if err != nil {
-		logger.Error("加载配置失败", zap.Error(err))
-		c.JSON(500, gin.H{
-			"status":  "error",
-			"message": "Failed to load config",
-		})
-		return
-	}
-
-	// 返回配置
-	c.JSON(200, gin.H{
-		"status": "success",
 		"data": gin.H{
-			"includedomain": conf.Mitmproxy.IncludeDomain,
-			"excludedomain": conf.Mitmproxy.ExcludeDomain,
-			"filtersuffix":  conf.Mitmproxy.FilterSuffix,
-			"addr_port":     conf.Mitmproxy.AddrPort,
-			"ssl_insecure":  conf.Mitmproxy.SslInsecure,
+			"includedomain": newConfig.IncludeDomain,
+			"excludedomain": newConfig.ExcludeDomain,
+			"filtersuffix":  newConfig.FilterSuffix,
+			"addr_port":     newConfig.AddrPort,
+			"ssl_insecure":  newConfig.SslInsecure,
 		},
 	})
 }
@@ -445,16 +455,40 @@ func (s *Server) GetTemplateContent(c *gin.Context) {
 		return
 	}
 
-	// 获取完整路径
-	fullPath := filepath.Join(".", filePath)
+	// 获取完整路径，使用templates目录作为基础
+	var fullPath string
+	if strings.HasPrefix(filePath, "templates/") {
+		// 如果已经包含templates前缀，直接使用
+		fullPath = filepath.Clean(filepath.Join(".", filePath))
+	} else {
+		// 否则添加templates前缀
+		fullPath = filepath.Clean(filepath.Join(".", "templates", filePath))
+	}
+
+	logger.Info("获取模板内容", zap.String("filePath", filePath), zap.String("fullPath", fullPath))
+
+	// 检查文件是否存在
+	if _, err := os.Stat(fullPath); os.IsNotExist(err) {
+		// 文件不存在，尝试使用绝对路径
+		templatesBasePath := config.GetTemplateBasePath()
+		if strings.HasPrefix(filePath, "templates/") {
+			// 去除templates/前缀
+			relativePath := strings.TrimPrefix(filePath, "templates/")
+			fullPath = filepath.Join(templatesBasePath, relativePath)
+		} else {
+			fullPath = filepath.Join(templatesBasePath, filePath)
+		}
+
+		logger.Info("尝试使用绝对路径", zap.String("fullPath", fullPath))
+	}
 
 	// 读取文件内容
 	content, err := os.ReadFile(fullPath)
 	if err != nil {
-		logger.Error("读取模板文件失败", zap.Error(err))
+		logger.Error("读取模板文件失败", zap.Error(err), zap.String("path", fullPath))
 		c.JSON(500, gin.H{
 			"status":  "error",
-			"message": "Failed to read template file",
+			"message": "Failed to read template file: " + err.Error(),
 		})
 		return
 	}
