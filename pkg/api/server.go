@@ -27,6 +27,7 @@ type Server struct {
 func NewServer(redisAddr string) *Server {
 	//gin.SetMode(gin.ReleaseMode)
 	r := gin.Default()
+	r.SetTrustedProxies([]string{"127.0.0.1"})
 
 	logger.Info("开始创建API服务")
 
@@ -74,6 +75,12 @@ func NewServer(redisAddr string) *Server {
 
 		// 获取当前过滤配置
 		api.GET("/config/filter", server.GetFilterConfig)
+
+		// 获取扫描速率配置
+		api.GET("/config/scanrate", server.GetScanRateConfig)
+
+		// 更新扫描速率配置
+		api.POST("/config/scanrate", server.UpdateScanRateConfig)
 
 		// 获取日志文件列表
 		api.GET("/logs", server.GetLogFiles)
@@ -155,6 +162,7 @@ func (s *Server) GetScanResultDetail(c *gin.Context) {
 func (s *Server) GetFilterConfig(c *gin.Context) {
 	logger.Info("收到获取配置请求")
 
+	config.LoadConfig()
 	// 确保配置已加载
 	if config.GConfig == nil {
 		logger.Error("全局配置为空")
@@ -170,8 +178,8 @@ func (s *Server) GetFilterConfig(c *gin.Context) {
 		"includedomain": config.GConfig.Mitmproxy.IncludeDomain,
 		"excludedomain": config.GConfig.Mitmproxy.ExcludeDomain,
 		"filtersuffix":  config.GConfig.Mitmproxy.FilterSuffix,
-		"addr_port":     config.GConfig.Mitmproxy.AddrPort,
-		"ssl_insecure":  config.GConfig.Mitmproxy.SslInsecure,
+		"addrport":      config.GConfig.Mitmproxy.AddrPort,
+		"sslinsecure":   config.GConfig.Mitmproxy.SslInsecure,
 	}
 
 	// 记录详细的配置信息
@@ -179,8 +187,8 @@ func (s *Server) GetFilterConfig(c *gin.Context) {
 		zap.Any("includedomain", responseData["includedomain"]),
 		zap.Any("excludedomain", responseData["excludedomain"]),
 		zap.Any("filtersuffix", responseData["filtersuffix"]),
-		zap.String("addr_port", responseData["addr_port"].(string)),
-		zap.Bool("ssl_insecure", responseData["ssl_insecure"].(bool)),
+		zap.String("addrport", responseData["addrport"].(string)),
+		zap.Bool("sslinsecure", responseData["sslinsecure"].(bool)),
 	)
 
 	c.JSON(200, gin.H{
@@ -203,8 +211,8 @@ func (s *Server) UpdateFilterConfig(c *gin.Context) {
 		zap.Any("includedomain", newConfig.IncludeDomain),
 		zap.Any("excludedomain", newConfig.ExcludeDomain),
 		zap.Any("filtersuffix", newConfig.FilterSuffix),
-		zap.String("addr_port", newConfig.AddrPort),
-		zap.Bool("ssl_insecure", newConfig.SslInsecure),
+		zap.String("addrport", newConfig.AddrPort),
+		zap.Bool("sslinsecure", newConfig.SslInsecure),
 	)
 
 	// 确保所有字段都有值
@@ -242,8 +250,8 @@ func (s *Server) UpdateFilterConfig(c *gin.Context) {
 			"includedomain": newConfig.IncludeDomain,
 			"excludedomain": newConfig.ExcludeDomain,
 			"filtersuffix":  newConfig.FilterSuffix,
-			"addr_port":     newConfig.AddrPort,
-			"ssl_insecure":  newConfig.SslInsecure,
+			"addrport":      newConfig.AddrPort,
+			"sslinsecure":   newConfig.SslInsecure,
 		},
 	})
 }
@@ -652,6 +660,137 @@ func (s *Server) GetScanStats(c *gin.Context) {
 		"data": gin.H{
 			"total": total,
 			"stats": stats,
+		},
+	})
+}
+
+// GetScanRateConfig 获取当前扫描速率配置
+func (s *Server) GetScanRateConfig(c *gin.Context) {
+	logger.Info("收到获取扫描速率配置请求")
+
+	// 每次都重新从文件加载配置，确保获取最新配置
+	if err := config.LoadConfig(); err != nil {
+		logger.Error("重新加载配置失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to load configuration",
+		})
+		return
+	}
+
+	// 确保配置已加载
+	if config.GConfig == nil {
+		logger.Error("全局配置为空")
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Configuration not initialized",
+		})
+		return
+	}
+
+	// 构建返回数据
+	responseData := gin.H{
+		// 全局速率
+		"globalrate":     config.GConfig.ScanRate.GlobalRate,
+		"globalrateunit": config.GConfig.ScanRate.GlobalRateUnit,
+
+		// 并发配置
+		"templateconcurrency":           config.GConfig.ScanRate.TemplateConcurrency,
+		"hostconcurrency":               config.GConfig.ScanRate.HostConcurrency,
+		"headlesshostconcurrency":       config.GConfig.ScanRate.HeadlessHostConcurrency,
+		"headlesstemplateconcurrency":   config.GConfig.ScanRate.HeadlessTemplateConcurrency,
+		"javascripttemplateconcurrency": config.GConfig.ScanRate.JavascriptTemplateConcurrency,
+		"templatepayloadconcurrency":    config.GConfig.ScanRate.TemplatePayloadConcurrency,
+		"probeconcurrency":              config.GConfig.ScanRate.ProbeConcurrency,
+	}
+
+	// 记录详细的配置信息
+	logger.Info("返回扫描速率配置",
+		zap.Int("globalRate", responseData["globalrate"].(int)),
+		zap.String("globalRateUnit", responseData["globalrateunit"].(string)),
+		zap.Int("templateConcurrency", responseData["templateconcurrency"].(int)),
+		zap.Int("hostConcurrency", responseData["hostconcurrency"].(int)),
+	)
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data":   responseData,
+	})
+}
+
+// UpdateScanRateConfig 更新扫描速率配置
+func (s *Server) UpdateScanRateConfig(c *gin.Context) {
+	var newConfig models.ScanRateConfig
+	if err := c.ShouldBindJSON(&newConfig); err != nil {
+		logger.Error("解析扫描速率配置JSON失败", zap.Error(err))
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	// 记录接收到的配置
+	logger.Info("收到新的扫描速率配置",
+		zap.Int("globalRate", newConfig.GlobalRate),
+		zap.String("globalRateUnit", newConfig.GlobalRateUnit),
+		zap.Int("templateConcurrency", newConfig.TemplateConcurrency),
+		zap.Int("hostConcurrency", newConfig.HostConcurrency),
+	)
+
+	// 验证配置
+	if newConfig.GlobalRate <= 0 {
+		newConfig.GlobalRate = 30 // 设置默认值
+	}
+	if newConfig.GlobalRateUnit == "" {
+		newConfig.GlobalRateUnit = "second"
+	}
+	if newConfig.TemplateConcurrency <= 0 {
+		newConfig.TemplateConcurrency = 100
+	}
+	if newConfig.HostConcurrency <= 0 {
+		newConfig.HostConcurrency = 100
+	}
+	if newConfig.HeadlessHostConcurrency <= 0 {
+		newConfig.HeadlessHostConcurrency = 50
+	}
+	if newConfig.HeadlessTemplateConcurrency <= 0 {
+		newConfig.HeadlessTemplateConcurrency = 50
+	}
+	if newConfig.JavascriptTemplateConcurrency <= 0 {
+		newConfig.JavascriptTemplateConcurrency = 50
+	}
+	if newConfig.TemplatePayloadConcurrency <= 0 {
+		newConfig.TemplatePayloadConcurrency = 25
+	}
+	if newConfig.ProbeConcurrency <= 0 {
+		newConfig.ProbeConcurrency = 50
+	}
+
+	// 保存到配置文件
+	if err := config.SaveScanRateConfigToFile(&newConfig); err != nil {
+		logger.Error("保存扫描速率配置到文件失败", zap.Error(err))
+		c.JSON(500, gin.H{"error": "Failed to save scan rate config to file"})
+		return
+	}
+
+	// 记录配置更新成功
+	logger.Info("扫描速率配置更新成功",
+		zap.Any("new_config", newConfig),
+		zap.String("client_ip", c.ClientIP()),
+	)
+
+	// 返回更新后的配置
+	c.JSON(200, gin.H{
+		"status":  "success",
+		"message": "Scan rate configuration updated",
+		"data": gin.H{
+			"globalrate":                    newConfig.GlobalRate,
+			"globalrateunit":                newConfig.GlobalRateUnit,
+			"templateconcurrency":           newConfig.TemplateConcurrency,
+			"hostconcurrency":               newConfig.HostConcurrency,
+			"headlesshostconcurrency":       newConfig.HeadlessHostConcurrency,
+			"headlesstemplateconcurrency":   newConfig.HeadlessTemplateConcurrency,
+			"javascripttemplateconcurrency": newConfig.JavascriptTemplateConcurrency,
+			"templatepayloadconcurrency":    newConfig.TemplatePayloadConcurrency,
+			"probeconcurrency":              newConfig.ProbeConcurrency,
 		},
 	})
 }

@@ -95,9 +95,9 @@ func NewTask(maxPoolsize int) (*Task, error) {
 	configWrapper := cache.NewConfigWrapper(redisManager)
 
 	// 设置模板搜索路径
-	templateConfig := config.GetLoaderConfig()
-	templateConfig.Templates = []string{baseTemplatesPath}
-	templateConfig.Workflows = []string{workflowsPath}
+	// templateConfig := config.GetLoaderConfig()
+	// templateConfig.Templates = []string{baseTemplatesPath}
+	// templateConfig.Workflows = []string{workflowsPath}
 
 	// 从配置包装器获取模板过滤器配置
 	templateFilters := configWrapper.GetTemplateFilters()
@@ -119,31 +119,131 @@ func NewTask(maxPoolsize int) (*Task, error) {
 		//nuclei.EnablePassiveMode(),
 		nuclei.DisableUpdateCheck(),
 		nuclei.EnableStatsWithOpts(nuclei.StatsOptions{MetricServerPort: 6064}),
-		nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
-			Templates: []string{
-				filepath.Join(baseTemplatesPath, "http"),
-				filepath.Join(baseTemplatesPath, "passive"),
-				filepath.Join(baseTemplatesPath, "cloud"),
-				filepath.Join(baseTemplatesPath, "code"),
-				filepath.Join(baseTemplatesPath, "dast"),
-				filepath.Join(baseTemplatesPath, "dns"),
-				filepath.Join(baseTemplatesPath, "file"),
-				filepath.Join(baseTemplatesPath, "headless"),
-				filepath.Join(baseTemplatesPath, "javascript"),
-				filepath.Join(baseTemplatesPath, "ssl"),
-			},
-			Workflows: []string{workflowsPath},
-		}),
-		nuclei.WithGlobalRateLimit(30, time.Second), //速率限制
-		nuclei.WithConcurrency(nuclei.Concurrency{
-			TemplateConcurrency:           100,
-			HostConcurrency:               100,
-			HeadlessHostConcurrency:       50,
-			HeadlessTemplateConcurrency:   50,
-			JavascriptTemplateConcurrency: 50,
-			TemplatePayloadConcurrency:    25,
-			ProbeConcurrency:              50,
-		}),
+
+		// 自动遍历baseTemplatesPath下的子目录
+		func() nuclei.NucleiSDKOptions {
+			// 准备模板目录列表
+			var templateDirs []string
+
+			// 读取baseTemplatesPath下的所有条目
+			entries, err := os.ReadDir(baseTemplatesPath)
+			if err != nil {
+				logger.Error("读取模板目录失败", zap.String("path", baseTemplatesPath), zap.Error(err))
+				// 如果读取失败，至少包含workflows目录
+				return nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
+					Templates: []string{baseTemplatesPath},
+					Workflows: []string{workflowsPath},
+				})
+			}
+
+			// 遍历所有条目，添加目录
+			for _, entry := range entries {
+				if entry.IsDir() {
+					subDirPath := filepath.Join(baseTemplatesPath, entry.Name())
+					// 排除workflows目录，因为它会单独添加
+					if subDirPath != workflowsPath {
+						templateDirs = append(templateDirs, subDirPath)
+						logger.Info("添加模板目录", zap.String("dir", subDirPath))
+					}
+				}
+			}
+
+			// 如果没有找到任何子目录，至少包含baseTemplatesPath本身
+			if len(templateDirs) == 0 {
+				templateDirs = append(templateDirs, baseTemplatesPath)
+				logger.Warn("未找到任何模板子目录，使用基础目录", zap.String("base_dir", baseTemplatesPath))
+			}
+
+			// 返回包含所有找到的目录的选项
+			return nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
+				Templates: templateDirs,
+				Workflows: []string{workflowsPath},
+			})
+		}(),
+
+		// 从配置中读取扫描速率设置
+		func() nuclei.NucleiSDKOptions {
+			// 获取速率配置
+			rateConfig := config.GConfig.ScanRate
+
+			// 默认速率
+			globalRate := 30
+			if rateConfig.GlobalRate > 0 {
+				globalRate = rateConfig.GlobalRate
+			}
+
+			// 默认单位是秒
+			rateUnit := time.Second
+			if rateConfig.GlobalRateUnit == "minute" {
+				rateUnit = time.Minute
+			} else if rateConfig.GlobalRateUnit == "hour" {
+				rateUnit = time.Hour
+			}
+
+			logger.Info("使用配置的扫描速率",
+				zap.Int("globalRate", globalRate),
+				zap.String("rateUnit", rateConfig.GlobalRateUnit),
+			)
+
+			return nuclei.WithGlobalRateLimit(globalRate, rateUnit)
+		}(),
+
+		// 从配置中读取并发设置
+		func() nuclei.NucleiSDKOptions {
+			// 获取并发配置
+			concurrencyConfig := config.GConfig.ScanRate
+
+			// 使用配置的值，如果配置为0则使用默认值
+			templateConcurrency := 100
+			if concurrencyConfig.TemplateConcurrency > 0 {
+				templateConcurrency = concurrencyConfig.TemplateConcurrency
+			}
+
+			hostConcurrency := 100
+			if concurrencyConfig.HostConcurrency > 0 {
+				hostConcurrency = concurrencyConfig.HostConcurrency
+			}
+
+			headlessHostConcurrency := 50
+			if concurrencyConfig.HeadlessHostConcurrency > 0 {
+				headlessHostConcurrency = concurrencyConfig.HeadlessHostConcurrency
+			}
+
+			headlessTemplateConcurrency := 50
+			if concurrencyConfig.HeadlessTemplateConcurrency > 0 {
+				headlessTemplateConcurrency = concurrencyConfig.HeadlessTemplateConcurrency
+			}
+
+			javascriptTemplateConcurrency := 50
+			if concurrencyConfig.JavascriptTemplateConcurrency > 0 {
+				javascriptTemplateConcurrency = concurrencyConfig.JavascriptTemplateConcurrency
+			}
+
+			templatePayloadConcurrency := 25
+			if concurrencyConfig.TemplatePayloadConcurrency > 0 {
+				templatePayloadConcurrency = concurrencyConfig.TemplatePayloadConcurrency
+			}
+
+			probeConcurrency := 50
+			if concurrencyConfig.ProbeConcurrency > 0 {
+				probeConcurrency = concurrencyConfig.ProbeConcurrency
+			}
+
+			logger.Info("使用配置的并发设置",
+				zap.Int("templateConcurrency", templateConcurrency),
+				zap.Int("hostConcurrency", hostConcurrency),
+			)
+
+			return nuclei.WithConcurrency(nuclei.Concurrency{
+				TemplateConcurrency:           templateConcurrency,
+				HostConcurrency:               hostConcurrency,
+				HeadlessHostConcurrency:       headlessHostConcurrency,
+				HeadlessTemplateConcurrency:   headlessTemplateConcurrency,
+				JavascriptTemplateConcurrency: javascriptTemplateConcurrency,
+				TemplatePayloadConcurrency:    templatePayloadConcurrency,
+				ProbeConcurrency:              probeConcurrency,
+			})
+		}(),
 	}
 
 	engine, err := nuclei.NewNucleiEngineCtx(context.Background(), options...)

@@ -20,9 +20,11 @@ var (
 
 // InitConfig 初始化配置
 func InitConfig() error {
+	// 1. 设置默认配置
+	setDefaultConfig()
 	var err error
 	once.Do(func() {
-		err = loadConfig()
+		err = LoadConfig()
 		if err == nil {
 			go watchConfig()
 		}
@@ -31,25 +33,25 @@ func InitConfig() error {
 }
 
 // loadConfig 从文件加载配置
-func loadConfig() error {
-	// 1. 设置默认配置
-	setDefaultConfig()
-
-	// 2. 读取配置文件
+func LoadConfig() error {
+	// 设置配置文件格式和路径
+	viper.SetConfigType("yaml")
 	viper.SetConfigFile("./config/config.yaml")
+
+	// 读取配置文件
 	if err := viper.ReadInConfig(); err != nil {
 		logger.Warn("无法读取配置文件，将使用默认配置",
 			zap.String("path", viper.ConfigFileUsed()),
 			zap.Error(err))
 	}
 
-	// 3. 解析配置到结构体
+	// 解析配置到结构体
 	GConfig = &models.Config{}
 	if err := viper.Unmarshal(GConfig); err != nil {
 		return fmt.Errorf("解析配置文件失败: %v", err)
 	}
 
-	// 4. 确保所有字段都被正确加载
+	// 确保关键字段被初始化
 	if GConfig.Mitmproxy.FilterSuffix == nil {
 		GConfig.Mitmproxy.FilterSuffix = []string{}
 	}
@@ -60,13 +62,16 @@ func loadConfig() error {
 		GConfig.Mitmproxy.ExcludeDomain = []string{}
 	}
 
-	// 5. 记录加载的配置
+	// 初始化扫描速率配置默认值
+	initDefaultScanRateConfig()
+
+	// 记录加载的配置
 	logger.Info("配置加载成功",
-		zap.Any("mitmproxy", GConfig.Mitmproxy),
-		zap.Any("headerMap", GConfig.HeaderMap),
-		zap.Any("caConfig", GConfig.CaConfig),
-		zap.Any("redis", GConfig.Redis),
-		zap.Any("templateFilter", GConfig.TemplateFilter),
+		zap.Any("mitmproxy.FilterSuffix", GConfig.Mitmproxy.FilterSuffix),
+		zap.Any("mitmproxy.IncludeDomain", GConfig.Mitmproxy.IncludeDomain),
+		zap.Any("mitmproxy.ExcludeDomain", GConfig.Mitmproxy.ExcludeDomain),
+		zap.String("mitmproxy.AddrPort", GConfig.Mitmproxy.AddrPort),
+		zap.Bool("mitmproxy.SslInsecure", GConfig.Mitmproxy.SslInsecure),
 	)
 
 	return nil
@@ -82,15 +87,16 @@ func watchConfig() {
 		)
 
 		// 重新加载配置
-		if err := loadConfig(); err != nil {
+		if err := LoadConfig(); err != nil {
 			logger.Error("重新加载配置失败", zap.Error(err))
 		} else {
 			// 记录重新加载后的配置
 			logger.Info("配置重新加载成功",
-				zap.Any("mitmproxy", GConfig.Mitmproxy),
-				zap.Any("headerMap", GConfig.HeaderMap),
-				zap.Any("caConfig", GConfig.CaConfig),
-				zap.Any("redis", GConfig.Redis),
+				zap.Any("mitmproxy.FilterSuffix", GConfig.Mitmproxy.FilterSuffix),
+				zap.Any("mitmproxy.IncludeDomain", GConfig.Mitmproxy.IncludeDomain),
+				zap.Any("mitmproxy.ExcludeDomain", GConfig.Mitmproxy.ExcludeDomain),
+				zap.String("mitmproxy.AddrPort", GConfig.Mitmproxy.AddrPort),
+				zap.Bool("mitmproxy.SslInsecure", GConfig.Mitmproxy.SslInsecure),
 				zap.Any("templateFilter", GConfig.TemplateFilter),
 			)
 		}
@@ -179,4 +185,70 @@ func setDefaultConfig() {
 	viper.SetDefault("mitmproxy.excludedomain", []string{})
 	viper.SetDefault("mitmproxy.addr_port", "7777")
 	viper.SetDefault("mitmproxy.ssl_insecure", false)
+}
+
+// initDefaultScanRateConfig 设置扫描速率配置的默认值
+func initDefaultScanRateConfig() {
+	// 如果扫描速率配置为空，设置默认值
+	if GConfig.ScanRate.GlobalRate == 0 {
+		GConfig.ScanRate.GlobalRate = 30
+	}
+	if GConfig.ScanRate.GlobalRateUnit == "" {
+		GConfig.ScanRate.GlobalRateUnit = "second"
+	}
+
+	// 并发配置默认值
+	if GConfig.ScanRate.TemplateConcurrency == 0 {
+		GConfig.ScanRate.TemplateConcurrency = 100
+	}
+	if GConfig.ScanRate.HostConcurrency == 0 {
+		GConfig.ScanRate.HostConcurrency = 100
+	}
+	if GConfig.ScanRate.HeadlessHostConcurrency == 0 {
+		GConfig.ScanRate.HeadlessHostConcurrency = 50
+	}
+	if GConfig.ScanRate.HeadlessTemplateConcurrency == 0 {
+		GConfig.ScanRate.HeadlessTemplateConcurrency = 50
+	}
+	if GConfig.ScanRate.JavascriptTemplateConcurrency == 0 {
+		GConfig.ScanRate.JavascriptTemplateConcurrency = 50
+	}
+	if GConfig.ScanRate.TemplatePayloadConcurrency == 0 {
+		GConfig.ScanRate.TemplatePayloadConcurrency = 25
+	}
+	if GConfig.ScanRate.ProbeConcurrency == 0 {
+		GConfig.ScanRate.ProbeConcurrency = 50
+	}
+}
+
+// SaveScanRateConfigToFile 保存扫描速率配置到文件
+func SaveScanRateConfigToFile(scanRate *models.ScanRateConfig) error {
+	// 更新内存中的配置
+	GConfig.ScanRate = *scanRate
+
+	// 将配置写入viper
+	viper.Set("scanrate.globalrate", scanRate.GlobalRate)
+	viper.Set("scanrate.globalrateunit", scanRate.GlobalRateUnit)
+	viper.Set("scanrate.templateconcurrency", scanRate.TemplateConcurrency)
+	viper.Set("scanrate.hostconcurrency", scanRate.HostConcurrency)
+	viper.Set("scanrate.headlesshostconcurrency", scanRate.HeadlessHostConcurrency)
+	viper.Set("scanrate.headlesstemplateconcurrency", scanRate.HeadlessTemplateConcurrency)
+	viper.Set("scanrate.javascripttemplateconcurrency", scanRate.JavascriptTemplateConcurrency)
+	viper.Set("scanrate.templatepayloadconcurrency", scanRate.TemplatePayloadConcurrency)
+	viper.Set("scanrate.probeconcurrency", scanRate.ProbeConcurrency)
+
+	// 写入文件
+	if err := viper.WriteConfig(); err != nil {
+		return fmt.Errorf("保存扫描速率配置到文件失败: %v", err)
+	}
+
+	// 记录保存的配置
+	logger.Info("扫描速率配置已保存到文件",
+		zap.Int("globalRate", scanRate.GlobalRate),
+		zap.String("globalRateUnit", scanRate.GlobalRateUnit),
+		zap.Int("templateConcurrency", scanRate.TemplateConcurrency),
+		zap.Int("hostConcurrency", scanRate.HostConcurrency),
+	)
+
+	return nil
 }

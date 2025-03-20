@@ -6,7 +6,7 @@
           扫描结果
         </el-menu-item>
         <el-menu-item index="/config/filter">
-          流量过滤配置
+          扫描配置
         </el-menu-item>
         <el-menu-item index="/logs">
           日志查看

@@ -10,14 +10,15 @@ type Config struct {
 	HeaderMap      HeaderMap            `mapstructure:"headermap"`
 	CaConfig       CaConfig             `mapstructure:"caconfig"`
 	TemplateFilter TemplateFilterConfig `mapstructure:"templatefilters"`
+	ScanRate       ScanRateConfig       `mapstructure:"scanrate"`
 }
 
 type MitmproxyConfig struct {
-	AddrPort      string   `mapstructure:"addr_port"`
-	SslInsecure   bool     `mapstructure:"ssl_insecure"`
-	IncludeDomain []string `mapstructure:"include_domain"`
-	ExcludeDomain []string `mapstructure:"exclude_domain"`
-	FilterSuffix  []string `mapstructure:"filter_suffix"`
+	AddrPort      string   `mapstructure:"addrport"`
+	SslInsecure   bool     `mapstructure:"sslinsecure"`
+	IncludeDomain []string `mapstructure:"includedomain"`
+	ExcludeDomain []string `mapstructure:"excludedomain"`
+	FilterSuffix  []string `mapstructure:"filtersuffix"`
 }
 
 type RedisConfig struct {
@@ -46,6 +47,22 @@ type TemplateFilterConfig struct {
 	ExcludeIDs           []string `mapstructure:"excludeids"`           // filter by excluding template IDs
 	TemplateCondition    []string `mapstructure:"templatecondition"`    // DSL condition/ expression
 	EnableCheck          bool     `mapstructure:"update_enable_check"`  // 是否启用更新检查
+}
+
+// ScanRateConfig 扫描速率配置
+type ScanRateConfig struct {
+	// 全局速率限制
+	GlobalRate     int    `mapstructure:"globalrate"`     // 每秒请求数
+	GlobalRateUnit string `mapstructure:"globalrateunit"` // 速率单位，默认为秒
+
+	// 并发配置
+	TemplateConcurrency           int `mapstructure:"templateconcurrency"`           // 模板并发
+	HostConcurrency               int `mapstructure:"hostconcurrency"`               // 主机并发
+	HeadlessHostConcurrency       int `mapstructure:"headlesshostconcurrency"`       // 无头浏览器主机并发
+	HeadlessTemplateConcurrency   int `mapstructure:"headlesstemplateconcurrency"`   // 无头浏览器模板并发
+	JavascriptTemplateConcurrency int `mapstructure:"javascripttemplateconcurrency"` // JavaScript模板并发
+	TemplatePayloadConcurrency    int `mapstructure:"templatepayloadconcurrency"`    // 模板载荷并发
+	ProbeConcurrency              int `mapstructure:"probeconcurrency"`              // 探测并发
 }
 
 // LoadConfig 从配置对象本身加载配置

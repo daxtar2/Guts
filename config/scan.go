@@ -2,7 +2,6 @@ package config
 
 import (
 	nuclei "github.com/projectdiscovery/nuclei/v3/lib"
-	"github.com/projectdiscovery/nuclei/v3/pkg/catalog/disk"
 	"github.com/projectdiscovery/nuclei/v3/pkg/catalog/loader"
 	"github.com/projectdiscovery/nuclei/v3/pkg/model/types/severity"
 	"github.com/projectdiscovery/nuclei/v3/pkg/protocols"
@@ -49,7 +48,7 @@ var DefaultConfig = &types.Options{
 }
 
 // 初始化为nil，后续会在更新模板路径后再创建
-var catalog *disk.DiskCatalog
+// var catalog *disk.DiskCatalog
 var LoaderConfig *loader.Config
 
 var ExecutorOptions = protocols.ExecutorOptions{
@@ -86,7 +85,7 @@ func InitTemplateLoader() {
 	DefaultConfig.NewTemplatesDirectory = templatesPath
 
 	// 使用更新后的路径创建目录扫描器
-	catalog = disk.NewCatalog(DefaultConfig.NewTemplatesDirectory)
+	//catalog = disk.NewCatalog(DefaultConfig.NewTemplatesDirectory)
 
 	// 创建加载器配置
 	LoaderConfig = &loader.Config{
@@ -103,8 +102,8 @@ func InitTemplateLoader() {
 		IncludeIds:        DefaultConfig.IncludeIds,
 		ExcludeIds:        DefaultConfig.ExcludeIds,
 		Protocols:         DefaultConfig.Protocols,
-		Catalog:           catalog,
-		ExcludeProtocols:  DefaultConfig.ExcludeProtocols,
+		//Catalog:           catalog,
+		ExcludeProtocols: DefaultConfig.ExcludeProtocols,
 	}
 }
 
