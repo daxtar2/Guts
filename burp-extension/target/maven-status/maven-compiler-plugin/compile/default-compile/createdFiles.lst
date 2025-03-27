@@ -1,0 +1,12 @@
+burp/GutsClient.class
+burp/HttpLogTable$1.class
+burp/LogEntry.class
+burp/Config.class
+burp/HttpLogTable$2.class
+burp/Utils.class
+burp/BurpExtender.class
+burp/BurpExtender$LogIDGenerator.class
+burp/BurpSuiteTab.class
+burp/HttpLogTable.class
+burp/HttpLogTableModel.class
+burp/GUI.class

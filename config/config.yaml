@@ -4,7 +4,7 @@ headermap:
     setcookie: []
 mitmproxy:
     addr_port: "7777"
-    addrport: ""
+    addrport: :7777
     excludedomain:
         - bilibili.com
         - github.com
@@ -125,14 +125,13 @@ mitmproxy:
         - .xlsx
         - .xpm
         - .xul
-        - .xwd
-    includedomain:
-        - 127.0.0.1
+    includedomain: []
+    ssl_insecure: false
     sslinsecure: true
 redis:
     address: 127.0.0.1:6379
 scanrate:
-    globalrate: 30
+    globalrate: 50
     globalrateunit: second
     headlesshostconcurrency: 50
     headlesstemplateconcurrency: 30
@@ -143,8 +142,8 @@ scanrate:
     templatepayloadconcurrency: 25
 templatefilters:
     severity: ""
-    excludeseverities: ""
-    protocoltypes: ""
+    excludeseverities: info,low,medium,critical
+    protocoltypes: http
     excludeprotocoltypes: ""
     authors: []
     tags:

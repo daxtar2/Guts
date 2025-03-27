@@ -43,7 +43,7 @@ func (d *Dumper) Requestheaders(f *proxy.Flow) {
 
 // call when <-f.Done()
 func (d *Dumper) dump(f *proxy.Flow) {
-	// 参�?httputil.DumpRequest
+	// 参�?httputil.DumpRequest
 
 	buf := bytes.NewBuffer(make([]byte, 0))
 	fmt.Fprintf(buf, "%s %s %s\r\n", f.Request.Method, f.Request.URL.RequestURI(), f.Request.Proto)

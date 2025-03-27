@@ -33,6 +33,8 @@ type Task struct {
 func NewTask(maxPoolsize int) (*Task, error) {
 	// 设置环境变量禁用nuclei默认模板下载
 	os.Setenv("DISABLE_NUCLEI_TEMPLATES_PUBLIC_DOWNLOAD", "true")
+	os.Setenv("NUCLEI_TEMPLATES_DIR", "")                // 清空默认模板目录
+	os.Setenv("NUCLEI_IGNORE_DEFAULT_TEMPLATES", "true") // 忽略默认模板
 
 	// 获取程序运行目录
 	execPath, err := os.Getwd()
@@ -41,13 +43,6 @@ func NewTask(maxPoolsize int) (*Task, error) {
 		return nil, err
 	}
 	logger.Info("当前运行文件：%s", zap.String("path", execPath))
-	// 获取可执行文件所在目录
-	// executablePath, err := os.Executable()
-	// if err != nil {
-	// 	logger.Error("获取可执行文件路径失败", zap.Error(err))
-	// 	return nil, err
-	// }
-	// executableDir := filepath.Dir(executablePath)
 
 	// 根据操作系统选择合适的基础路径
 	var baseTemplatesPath string
@@ -57,11 +52,6 @@ func NewTask(maxPoolsize int) (*Task, error) {
 	} else {
 		// macOS/Linux下优先使用当前工作目录
 		baseTemplatesPath = filepath.Join(execPath, "templates")
-
-		// 如果当前工作目录下没有templates目录，则尝试使用可执行文件所在目录
-		// if _, err := os.Stat(baseTemplatesPath); os.IsNotExist(err) {
-		// 	baseTemplatesPath = filepath.Join(executableDir, "templates")
-		// }
 	}
 
 	workflowsPath := filepath.Join(baseTemplatesPath, "workflows")
@@ -94,11 +84,6 @@ func NewTask(maxPoolsize int) (*Task, error) {
 	// 创建配置包装器
 	configWrapper := cache.NewConfigWrapper(redisManager)
 
-	// 设置模板搜索路径
-	// templateConfig := config.GetLoaderConfig()
-	// templateConfig.Templates = []string{baseTemplatesPath}
-	// templateConfig.Workflows = []string{workflowsPath}
-
 	// 从配置包装器获取模板过滤器配置
 	templateFilters := configWrapper.GetTemplateFilters()
 
@@ -116,50 +101,13 @@ func NewTask(maxPoolsize int) (*Task, error) {
 			ExcludeIDs:           templateFilters.ExcludeIDs,
 			TemplateCondition:    templateFilters.TemplateCondition,
 		}),
-		//nuclei.EnablePassiveMode(),
 		nuclei.DisableUpdateCheck(),
+		nuclei.SignedTemplatesOnly(),
 		nuclei.EnableStatsWithOpts(nuclei.StatsOptions{MetricServerPort: 6064}),
-
-		// 自动遍历baseTemplatesPath下的子目录
-		func() nuclei.NucleiSDKOptions {
-			// 准备模板目录列表
-			var templateDirs []string
-
-			// 读取baseTemplatesPath下的所有条目
-			entries, err := os.ReadDir(baseTemplatesPath)
-			if err != nil {
-				logger.Error("读取模板目录失败", zap.String("path", baseTemplatesPath), zap.Error(err))
-				// 如果读取失败，至少包含workflows目录
-				return nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
-					Templates: []string{baseTemplatesPath},
-					Workflows: []string{workflowsPath},
-				})
-			}
-
-			// 遍历所有条目，添加目录
-			for _, entry := range entries {
-				if entry.IsDir() {
-					subDirPath := filepath.Join(baseTemplatesPath, entry.Name())
-					// 排除workflows目录，因为它会单独添加
-					if subDirPath != workflowsPath {
-						templateDirs = append(templateDirs, subDirPath)
-						logger.Info("添加模板目录", zap.String("dir", subDirPath))
-					}
-				}
-			}
-
-			// 如果没有找到任何子目录，至少包含baseTemplatesPath本身
-			if len(templateDirs) == 0 {
-				templateDirs = append(templateDirs, baseTemplatesPath)
-				logger.Warn("未找到任何模板子目录，使用基础目录", zap.String("base_dir", baseTemplatesPath))
-			}
-
-			// 返回包含所有找到的目录的选项
-			return nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
-				Templates: templateDirs,
-				Workflows: []string{workflowsPath},
-			})
-		}(),
+		nuclei.WithTemplatesOrWorkflows(nuclei.TemplateSources{
+			Templates: []string{baseTemplatesPath},
+			Workflows: []string{workflowsPath},
+		}),
 
 		// 从配置中读取扫描速率设置
 		func() nuclei.NucleiSDKOptions {
@@ -309,8 +257,8 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 
 	target := []string{passiveResult.Url}
 
-	// 创建一个上下文，可以用于控制超时和取消
-	Ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	// 创建一个带超时的上下文
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
 	// 使用上下文加载目标
@@ -328,16 +276,22 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 
 	// 执行扫描，使用上下文和互斥锁保护执行过程
 	executionMutex.Lock()
-	defer executionMutex.Unlock() // 确保解锁
+	defer executionMutex.Unlock()
 
 	// 使用带缓冲的通道来防止结果处理阻塞
-	resultChan := make(chan *output.ResultEvent, 1000)
+	resultChan := make(chan *output.ResultEvent, 50)
 	defer close(resultChan)
 
 	// 启动结果处理协程
 	done := make(chan struct{})
 	go func() {
-		defer close(done)
+		defer func() {
+			if r := recover(); r != nil {
+				logger.Error("结果处理协程发生 panic", zap.Any("recover", r))
+			}
+			close(done)
+		}()
+
 		for {
 			select {
 			case event, ok := <-resultChan:
@@ -392,13 +346,19 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 					select {
 					case t.resultChan <- scanResult:
 						logger.Info("扫描结果已发送到结果通道", zap.String("url", parseUrl))
-					case <-time.After(5 * time.Second):
+					case <-time.After(3 * time.Second):
 						logger.Warn("发送扫描结果超时", zap.String("url", parseUrl))
 					case <-t.stopChan:
 						logger.Info("扫描被停止", zap.String("url", parseUrl))
 						return
+					case <-ctx.Done():
+						logger.Info("扫描上下文已取消", zap.String("url", parseUrl))
+						return
 					}
 				}()
+			case <-ctx.Done():
+				logger.Info("扫描上下文已取消", zap.String("url", passiveResult.Url))
+				return
 			case <-t.stopChan:
 				logger.Info("结果处理被停止", zap.String("url", passiveResult.Url))
 				return
@@ -406,13 +366,24 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 		}
 	}()
 
+	// 创建一个用于控制扫描超时的通道
+	scanTimeout := make(chan struct{})
+	go func() {
+		time.Sleep(30 * time.Second)
+		close(scanTimeout)
+	}()
+
 	// 执行扫描，使用自定义的结果处理函数
-	err := t.engine.ExecuteCallbackWithCtx(Ctx, func(event *output.ResultEvent) {
+	err := t.engine.ExecuteCallbackWithCtx(ctx, func(event *output.ResultEvent) {
 		select {
 		case resultChan <- event:
 			// 结果已成功发送到处理通道
+		case <-ctx.Done():
+			logger.Info("扫描上下文已取消", zap.String("url", event.URL))
 		case <-t.stopChan:
 			logger.Info("扫描被停止", zap.String("url", event.URL))
+		case <-scanTimeout:
+			logger.Info("扫描超时", zap.String("url", event.URL))
 		default:
 			logger.Warn("结果处理通道已满，丢弃结果", zap.String("url", event.URL))
 		}
@@ -427,7 +398,9 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 	select {
 	case <-done:
 		logger.Info("扫描完成", zap.String("url", passiveResult.Url))
-	case <-time.After(5 * time.Minute):
+	case <-time.After(1 * time.Minute):
+		logger.Warn("扫描超时", zap.String("url", passiveResult.Url))
+	case <-scanTimeout:
 		logger.Warn("扫描超时", zap.String("url", passiveResult.Url))
 	}
 

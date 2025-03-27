@@ -3,6 +3,8 @@ package mitm
 import (
 	"fmt"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/logger"
@@ -11,37 +13,15 @@ import (
 	"go.uber.org/zap"
 )
 
+// NewMitmproxy 创建新的代理服务
 func NewMitmproxy() error {
-	certDir := config.GConfig.CaConfig.CaRootPath
-
-	// 确保证书目录存在
-	if err := os.MkdirAll(certDir, 0755); err != nil {
-		logger.Error("创建证书目录失败", zap.Error(err))
-	}
-
-	// // 使用 NewSelfSignCA 来处理证书的加载或创建
-	// ca, err := cert.NewSelfSignCA(certDir)
-	// if err != nil {
-	// 	logger.Error("证书初始化失败", zap.Error(err))
-	// }
-
-	// // 如果是新生成的证书，尝试安装到系统信任列表
-	// certFile := filepath.Join(certDir, "mitmproxy-ca-cert.pem")
-	// if _, err := os.Stat(certFile); err == nil {
-	// 	if err := util.InstallCACert(certFile); err != nil {
-	// 		logger.Info("警告: 自动安装证书失败，请手动安装证书:", zap.Error(err))
-	// 		logger.Info("证书路径:", zap.String("certFile", certFile))
-	// 		//logger.Info("Windows 用户请双击 %s 安装证书到 '受信任的根证书颁发机构'",filepath.Join(certDir, "mitmproxy-ca-cert.cer"))
-	// 	}
-	// }
-
 	// 创建全局扫描任务
-	globalTask, err := scan.NewTask(30)
+	task, err := scan.NewTask(100)
 	if err != nil {
 		logger.Error("创建扫描任务失败", zap.Error(err))
 		return fmt.Errorf("创建扫描任务失败: %v", err)
 	}
-	globalTask.Wg.Add(1) // 堵塞进程，防止提前退出
+	task.Wg.Add(1) // 堵塞进程，防止提前退出
 
 	// 获取代理端口配置
 	proxyPort := config.GConfig.Mitmproxy.AddrPort
@@ -52,34 +32,38 @@ func NewMitmproxy() error {
 
 	logger.Info("正在启动代理服务", zap.String("port", proxyPort))
 
+	// 设置代理选项
 	opts := &proxy.Options{
-		Debug:             0,
 		Addr:              proxyPort,
 		StreamLargeBodies: 1024 * 1024 * 5,
-		SslInsecure:       true, // 强制设置为 true
-		CaRootPath:        certDir,
-		//NewCaFunc:         func() (cert.CA, error) { return ca, nil },
+		SslInsecure:       config.GConfig.Mitmproxy.SslInsecure,
 	}
 
+	// 创建代理服务器
 	p, err := proxy.NewProxy(opts)
 	if err != nil {
 		logger.Error("创建代理失败", zap.Error(err))
+		return fmt.Errorf("创建代理服务器失败: %v", err)
 	}
 
-	infoAddon := NewInfoAddon(config.GConfig, globalTask, config.GConfig.Mitmproxy.FilterSuffix)
+	// 添加流量输出 addon
+	infoAddon := newInfoAddon(config.GConfig, task, config.GConfig.Mitmproxy.FilterSuffix)
 	p.AddAddon(infoAddon)
-
-	// 添加UpstreamCertAddon来禁用上游证书验证
-	p.AddAddon(proxy.NewUpstreamCertAddon(true)) // 修改为 true
 
 	// 启动代理服务器
 	go func() {
 		if err := p.Start(); err != nil {
-			logger.Error("启动代理失败", zap.Error(err))
+			logger.Error("代理服务器启动失败", zap.Error(err))
 		}
 	}()
 
-	globalTask.Wg.Wait()
+	// 等待中断信号
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigChan
 
+	// 优雅关闭
+	p.Close()
+	task.Wg.Done()
 	return nil
 }
