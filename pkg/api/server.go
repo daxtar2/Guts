@@ -95,10 +95,11 @@ func NewServer(redisAddr string) *Server {
 		api.POST("/config/template", server.UpdateTemplateConfig)
 
 		// 模板管理相关路由
-		api.GET("/templates", server.GetTemplatesList)           // 获取模板列表
-		api.GET("/templates/*path", server.GetTemplateContent)   // 获取模板内容
-		api.POST("/templates/*path", server.SaveTemplateContent) // 保存模板内容
-		api.DELETE("/templates/*path", server.DeleteTemplate)    // 删除模板
+		api.GET("/templates/search", server.SearchTemplates)             // 搜索模板
+		api.GET("/templates", server.GetTemplatesList)                   // 获取模板列表
+		api.GET("/templates/content/*path", server.GetTemplateContent)   // 获取模板内容
+		api.POST("/templates/content/*path", server.SaveTemplateContent) // 保存模板内容
+		api.DELETE("/templates/content/*path", server.DeleteTemplate)    // 删除模板
 
 		// 获取扫描结果的统计信息
 		api.GET("/scan/stats", server.GetScanStats)
@@ -792,6 +793,83 @@ func (s *Server) UpdateScanRateConfig(c *gin.Context) {
 			"templatepayloadconcurrency":    newConfig.TemplatePayloadConcurrency,
 			"probeconcurrency":              newConfig.ProbeConcurrency,
 		},
+	})
+}
+
+// SearchTemplates 搜索模板
+func (s *Server) SearchTemplates(c *gin.Context) {
+	query := c.Query("query")
+	if query == "" {
+		c.JSON(http.StatusOK, gin.H{
+			"status": "success",
+			"data":   []interface{}{},
+		})
+		return
+	}
+
+	// 获取程序运行目录
+	execPath, err := os.Getwd()
+	if err != nil {
+		logger.Error("获取程序运行路径失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "获取程序运行路径失败",
+		})
+		return
+	}
+
+	// 构建模板目录路径
+	baseTemplatesPath := filepath.Join(execPath, "templates")
+	var results []map[string]interface{}
+
+	// 递归搜索目录
+	err = filepath.Walk(baseTemplatesPath, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		// 跳过目录本身
+		if path == baseTemplatesPath {
+			return nil
+		}
+
+		// 获取相对路径
+		relPath, err := filepath.Rel(baseTemplatesPath, path)
+		if err != nil {
+			return err
+		}
+
+		// 检查是否匹配搜索条件
+		if strings.Contains(strings.ToLower(info.Name()), strings.ToLower(query)) {
+			result := map[string]interface{}{
+				"name":  info.Name(),
+				"path":  filepath.Join("templates", relPath),
+				"isDir": info.IsDir(),
+				"type": func() string {
+					if info.IsDir() {
+						return "directory"
+					}
+					return "file"
+				}(),
+			}
+			results = append(results, result)
+		}
+
+		return nil
+	})
+
+	if err != nil {
+		logger.Error("搜索模板失败", zap.Error(err))
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"status": "error",
+			"error":  "搜索模板失败",
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status": "success",
+		"data":   results,
 	})
 }
 

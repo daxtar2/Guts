@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"reflect"
 	"runtime"
 	"sync"
 	"time"
@@ -241,6 +242,17 @@ func (t *Task) ScanPassiveResult(passiveResult *models.PassiveResult) error {
 func (t *Task) NotifyResult(result *models.ScanResult) {
 	select {
 	case t.resultChan <- result:
+		// 保存到 Redis
+		if err := t.templateCache.Client.SaveScanResult(result); err != nil {
+			logger.Error("保存扫描结果到 Redis 失败",
+				zap.String("url", result.Target),
+				zap.String("name", result.Name),
+				zap.Error(err))
+		} else {
+			logger.Info("扫描结果已保存到 Redis",
+				zap.String("url", result.Target),
+				zap.String("name", result.Name))
+		}
 	default:
 		logger.Warn("结果通知队列已满")
 	}
@@ -253,7 +265,10 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 		logger.Warn("目标已在扫描中，跳过", zap.String("url", passiveResult.Url))
 		return nil
 	}
-	defer t.scanning.Delete(passiveResult.Url)
+	defer func() {
+		t.scanning.Delete(passiveResult.Url)
+		logger.Info("扫描状态已清理，准备接收新目标", zap.String("url", passiveResult.Url))
+	}()
 
 	target := []string{passiveResult.Url}
 
@@ -264,7 +279,9 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 	// 使用上下文加载目标
 	t.engine.LoadTargets(target, false)
 
-	logger.Info("开始扫描目标", zap.String("url", target[0]))
+	logger.Info("开始扫描目标",
+		zap.String("url", target[0]),
+		zap.Int("timeout_seconds", 30))
 
 	// 添加互斥锁保护执行过程
 	executionMutex := &sync.Mutex{}
@@ -290,12 +307,14 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 				logger.Error("结果处理协程发生 panic", zap.Any("recover", r))
 			}
 			close(done)
+			logger.Info("结果处理协程已退出", zap.String("url", passiveResult.Url))
 		}()
 
 		for {
 			select {
 			case event, ok := <-resultChan:
 				if !ok {
+					logger.Info("结果通道已关闭", zap.String("url", passiveResult.Url))
 					return
 				}
 				if event == nil || event.Info.Name == "" {
@@ -322,45 +341,34 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 					severity := "unknown"
 
 					// 直接使用String()方法获取值，然后检查
-					sevStr := event.Info.SeverityHolder.Severity.String()
-					if sevStr != "" && sevStr != "unknown" && sevStr != "Unknown" {
+					if sevStr := event.Info.SeverityHolder.Severity.String(); sevStr != "" && sevStr != "unknown" && sevStr != "Unknown" {
 						severity = sevStr
 					}
 
-					// 创建扫描结果
+					// 创建扫描结果，添加空值检查
 					scanResult := &models.ScanResult{
 						ID:          fmt.Sprintf("%d", time.Now().UnixNano()),
 						Target:      parseUrl,
-						Name:        event.Info.Name,
+						Name:        getStringValue(event.Info, "Name"),
 						Severity:    severity,
-						Type:        event.Type,
-						Host:        event.Host,
-						MatchedAt:   event.Matched,
-						Description: event.Info.Description,
-						Tags:        event.Info.Tags.ToSlice(),
-						Reference:   event.Info.Reference.ToSlice(),
+						Type:        getStringValue(event, "Type"),
+						Host:        getStringValue(event, "Host"),
+						MatchedAt:   getStringValue(event, "Matched"),
+						Description: getStringValue(event.Info, "Description"),
+						Tags:        getStringSlice(event.Info, "Tags"),
+						Reference:   getStringSlice(event.Info, "Reference"),
 						Timestamp:   time.Now(),
 					}
 
-					// 使用带超时的发送操作
-					select {
-					case t.resultChan <- scanResult:
-						logger.Info("扫描结果已发送到结果通道", zap.String("url", parseUrl))
-					case <-time.After(3 * time.Second):
-						logger.Warn("发送扫描结果超时", zap.String("url", parseUrl))
-					case <-t.stopChan:
-						logger.Info("扫描被停止", zap.String("url", parseUrl))
-						return
-					case <-ctx.Done():
-						logger.Info("扫描上下文已取消", zap.String("url", parseUrl))
-						return
-					}
+					// 使用 NotifyResult 处理扫描结果
+					t.NotifyResult(scanResult)
+					logger.Info("扫描结果已处理", zap.String("url", parseUrl))
 				}()
 			case <-ctx.Done():
-				logger.Info("扫描上下文已取消", zap.String("url", passiveResult.Url))
+				logger.Info("扫描上下文已取消，等待新目标", zap.String("url", passiveResult.Url))
 				return
 			case <-t.stopChan:
-				logger.Info("结果处理被停止", zap.String("url", passiveResult.Url))
+				logger.Info("扫描被停止，等待新目标", zap.String("url", passiveResult.Url))
 				return
 			}
 		}
@@ -371,6 +379,7 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 	go func() {
 		time.Sleep(30 * time.Second)
 		close(scanTimeout)
+		logger.Info("扫描超时通道已关闭", zap.String("url", passiveResult.Url))
 	}()
 
 	// 执行扫描，使用自定义的结果处理函数
@@ -397,11 +406,11 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 	// 等待所有结果处理完成或超时
 	select {
 	case <-done:
-		logger.Info("扫描完成", zap.String("url", passiveResult.Url))
+		logger.Info("扫描完成，等待新目标", zap.String("url", passiveResult.Url))
 	case <-time.After(1 * time.Minute):
-		logger.Warn("扫描超时", zap.String("url", passiveResult.Url))
+		logger.Warn("扫描超时，等待新目标", zap.String("url", passiveResult.Url))
 	case <-scanTimeout:
-		logger.Warn("扫描超时", zap.String("url", passiveResult.Url))
+		logger.Warn("扫描超时，等待新目标", zap.String("url", passiveResult.Url))
 	}
 
 	return nil
@@ -413,4 +422,43 @@ func (t *Task) Close() {
 	if t.engine != nil {
 		t.engine.Close()
 	}
+}
+
+// 添加辅助函数来安全地获取字符串值
+func getStringValue(obj interface{}, field string) string {
+	if obj == nil {
+		return ""
+	}
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	f := v.FieldByName(field)
+	if !f.IsValid() {
+		return ""
+	}
+	return f.String()
+}
+
+// 添加辅助函数来安全地获取字符串切片
+func getStringSlice(obj interface{}, field string) []string {
+	if obj == nil {
+		return nil
+	}
+	v := reflect.ValueOf(obj)
+	if v.Kind() == reflect.Ptr {
+		v = v.Elem()
+	}
+	f := v.FieldByName(field)
+	if !f.IsValid() {
+		return nil
+	}
+	if f.Kind() != reflect.Slice {
+		return nil
+	}
+	result := make([]string, f.Len())
+	for i := 0; i < f.Len(); i++ {
+		result[i] = f.Index(i).String()
+	}
+	return result
 }

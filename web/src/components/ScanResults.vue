@@ -4,7 +4,7 @@
     
     <!-- 结果统计卡片 -->
     <el-row :gutter="20" class="statistics">
-      <el-col :span="6" v-for="(stat, severity) in statistics" :key="severity">
+      <el-col :span="8" v-for="(stat, severity) in statistics" :key="severity">
         <el-card :class="['stat-card', severity.toLowerCase()]">
           <div class="stat-content">
             <div class="stat-number">{{ stat }}</div>
@@ -127,23 +127,37 @@ export default defineComponent({
       High: 0,
       Medium: 0,
       Low: 0,
+
     })
 
     const loadResults = async () => {
       loading.value = true
       try {
-        const response = await axios.get('/api/scan/results', {
+        // 获取分页结果
+        const resultsResponse = await axios.get('/api/scan/results', {
           params: {
             page: currentPage.value,
             pageSize: pageSize.value,
           },
         })
-        console.log('API Response:', response.data)
         
-        if (response.data.status === 'success') {
-          scanResults.value = response.data.data.results
-          total.value = response.data.data.total
-          updateStatistics(response.data.data.results)
+        // 获取统计信息
+        const statsResponse = await axios.get('/api/scan/stats')
+        
+        if (resultsResponse.data.status === 'success' && statsResponse.data.status === 'success') {
+          scanResults.value = resultsResponse.data.data.results
+          total.value = resultsResponse.data.data.total
+          
+          // 更新统计信息
+          const stats = statsResponse.data.data.stats
+          statistics.value = {
+            Critical: stats.critical || 0,
+            High: stats.high || 0,
+            Medium: stats.medium || 0,
+            Low: stats.low || 0,
+            Info: stats.info || 0,
+            Unknown: stats.unknown || 0
+          }
         } else {
           ElMessage.warning('获取扫描结果失败')
         }
@@ -153,20 +167,6 @@ export default defineComponent({
       } finally {
         loading.value = false
       }
-    }
-
-    const updateStatistics = (results) => {
-      // 重置统计
-      Object.keys(statistics.value).forEach(key => {
-        statistics.value[key] = 0
-      })
-      
-      // 统计各严重程度的数量
-      results.forEach(result => {
-        if (statistics.value.hasOwnProperty(result.severity)) {
-          statistics.value[result.severity]++
-        }
-      })
     }
 
     const handleSizeChange = (val) => {
@@ -244,9 +244,11 @@ export default defineComponent({
 }
 
 .stat-card.critical { background-color: #fef0f0; }
-.stat-card.high { background-color: #fdf6ec; }
+.stat-card.high { background-color: #fef0f0; }
 .stat-card.medium { background-color: #fdf6ec; }
 .stat-card.low { background-color: #f0f9eb; }
+.stat-card.info { background-color: #f0f9eb; }
+.stat-card.unknown { background-color: #f0f9eb; }
 
 .stat-content {
   padding: 10px;

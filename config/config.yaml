@@ -19,6 +19,15 @@ mitmproxy:
         - microsoft.com
         - gator.volces.com
         - api-static.aippt.cn
+        - services.addons.mozilla.org
+        - mozilla.org
+        - mozilla.net
+        - mozilla.com
+        - firefox.com
+        - firefox.cn
+        - firefox.net
+        - firefox.org
+        - firefox.com.cn
     filtersuffix:
         - .aac
         - .abw
@@ -141,13 +150,13 @@ scanrate:
     templateconcurrency: 100
     templatepayloadconcurrency: 25
 templatefilters:
-    severity: ""
-    excludeseverities: info,low,medium,critical
-    protocoltypes: http
+    severity: critical,high,medium,low,info
+    excludeseverities: ""
+    protocoltypes: ""
     excludeprotocoltypes: ""
     authors: []
     tags:
-        - rails
+        - webmin
     excludetags: []
     includetags: []
     ids: []

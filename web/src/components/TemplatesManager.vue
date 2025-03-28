@@ -33,6 +33,50 @@
           <el-icon><ArrowLeft /></el-icon>
           返回上一级
         </el-button>
+
+        <!-- 添加搜索框和搜索按钮 -->
+        <div class="search-box">
+          <el-input
+            v-model="searchQuery"
+            placeholder="搜索文件或目录..."
+            :prefix-icon="Search"
+            clearable
+            size="small"
+          />
+          <el-button 
+            type="primary" 
+            @click="handleSearch"
+            size="small"
+          >
+            搜索
+          </el-button>
+        </div>
+      </div>
+
+      <!-- 搜索结果列表 -->
+      <div v-if="searchResults.length > 0" class="search-results">
+        <h3>搜索结果</h3>
+        <el-table :data="searchResults" style="width: 100%">
+          <el-table-column prop="name" label="名称">
+            <template #default="{ row }">
+              <el-button 
+                link 
+                type="primary" 
+                @click="handleSearchResultClick(row)"
+              >
+                <el-icon v-if="row.isDir"><Folder /></el-icon>
+                <el-icon v-else><Document /></el-icon>
+                {{ row.name }}
+              </el-button>
+            </template>
+          </el-table-column>
+          <el-table-column prop="path" label="路径" />
+          <el-table-column prop="type" label="类型" width="100">
+            <template #default="{ row }">
+              {{ row.isDir ? '目录' : '文件' }}
+            </template>
+          </el-table-column>
+        </el-table>
       </div>
 
       <!-- 创建文件/目录对话框 -->
@@ -57,7 +101,7 @@
         </template>
       </el-dialog>
 
-      <el-table :data="templates" style="width: 100%">
+      <el-table v-if="!searchResults.length" :data="templates" style="width: 100%">
         <el-table-column prop="name" label="名称">
           <template #default="{ row }">
             <el-button 
@@ -126,11 +170,11 @@
 import { ref, computed } from 'vue'
 import { ElMessage } from 'element-plus'
 import axios from 'axios'
-import { Folder, Document, ArrowLeft, Close, Plus, Delete } from '@element-plus/icons-vue'
+import { Folder, Document, ArrowLeft, Close, Plus, Delete, Search } from '@element-plus/icons-vue'
 
 export default {
   name: 'TemplatesManager',
-  components: { Folder, Document, ArrowLeft, Close, Plus, Delete },
+  components: { Folder, Document, ArrowLeft, Close, Plus, Delete, Search },
   
   setup() {
     const templates = ref([])
@@ -142,6 +186,8 @@ export default {
     const createForm = ref({
       name: '',
     })
+    const searchQuery = ref('')
+    const searchResults = ref([])
 
     const pathParts = computed(() => {
       return currentPath.value.split('/').slice(1)
@@ -168,7 +214,7 @@ export default {
       } else {
         try {
           const path = item.path.replace(/^templates\//, '')
-          const response = await axios.get(`/api/templates/${path}`)
+          const response = await axios.get(`/api/templates/content/${path}`)
           if (response.data.status === 'success') {
             selectedTemplate.value = item
             templateContent.value = response.data.data.content
@@ -187,7 +233,7 @@ export default {
       try {
         const path = selectedTemplate.value.path.replace(/^templates\//, '')
         const response = await axios.post(
-          `/api/templates/${path}`,
+          `/api/templates/content/${path}`,
           { content: templateContent.value }
         )
         if (response.data.status === 'success') {
@@ -282,7 +328,7 @@ export default {
       try {
         // 移除路径中重复的 'templates/' 前缀
         const path = item.path.replace(/^templates\//, '')
-        const response = await axios.delete(`/api/templates/${path}`)
+        const response = await axios.delete(`/api/templates/content/${path}`)
         if (response.data.status === 'success') {
           ElMessage.success('删除成功')
           // 如果正在编辑这个文件，关闭编辑器
@@ -298,6 +344,47 @@ export default {
       }
     }
 
+    // 处理搜索
+    const handleSearch = async () => {
+      if (!searchQuery.value) {
+        searchResults.value = []
+        return
+      }
+
+      try {
+        const response = await axios.get(`/api/templates/search?query=${encodeURIComponent(searchQuery.value)}`)
+        if (response.data.status === 'success') {
+          searchResults.value = response.data.data
+        }
+      } catch (error) {
+        ElMessage.error('搜索失败')
+        console.error('搜索失败:', error)
+      }
+    }
+
+    // 处理搜索结果点击
+    const handleSearchResultClick = async (item) => {
+      if (item.isDir) {
+        await loadTemplates(item.path)
+        searchQuery.value = ''
+        searchResults.value = []
+      } else {
+        try {
+          const path = item.path.replace(/^templates\//, '')
+          const response = await axios.get(`/api/templates/content/${path}`)
+          if (response.data.status === 'success') {
+            selectedTemplate.value = item
+            templateContent.value = response.data.data.content
+            searchQuery.value = ''
+            searchResults.value = []
+          }
+        } catch (error) {
+          ElMessage.error('加载模板内容失败')
+          console.error('加载模板内容失败:', error)
+        }
+      }
+    }
+
     // 初始加载
     loadTemplates()
 
@@ -307,18 +394,23 @@ export default {
       pathParts,
       selectedTemplate,
       templateContent,
+      createDialogVisible,
+      createType,
+      createForm,
+      searchQuery,
+      searchResults,
+      loadTemplates,
       handleItemClick,
       saveTemplate,
       navigateToRoot,
       navigateToPath,
       navigateBack,
       closeTemplate,
-      createDialogVisible,
-      createType,
-      createForm,
       showCreateDialog,
       handleCreate,
       handleDelete,
+      handleSearch,
+      handleSearchResultClick,
       Delete, // 导出图标以供模板使用
     }
   },
@@ -380,6 +472,17 @@ export default {
   display: flex;
   margin-bottom: 10px;
   gap: 10px;
+}
+
+.search-box {
+  flex: 1;
+  max-width: 300px;
+  display: flex;
+  gap: 8px;
+}
+
+.search-results {
+  margin-top: 20px;
 }
 
 :deep(.el-breadcrumb__item) {
