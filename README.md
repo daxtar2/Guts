@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Guts Logo](web/src/assets/logo.png)
+![Guts Logo](static/guts.png)
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/daxtar2/Guts)](https://goreportcard.com/report/github.com/daxtar2/Guts)
 [![License](https://img.shields.io/github/license/daxtar2/Guts)](LICENSE)
@@ -12,7 +12,8 @@
 
 ## 📖 项目介绍
 
-Guts 是一个基于nuclei开发的被动扫描器，集成了 BurpSuite 插件和 Nuclei 扫描引擎，提供被动扫描和主动扫描能力。该平台采用前后端分离架构，支持实时扫描结果展示、漏洞管理、模板管理等功能。
+（测试中）
+Guts 是一个基于nuclei开发的被动扫描器，集成了Nuclei 扫描引擎，提供被动扫描和主动扫描能力。该平台采用前后端分离架构，支持实时扫描结果展示、漏洞管理、模板管理等功能,  相关 BurpSuite 插件后续放出
 
 ## ✨ 主要特性
 
@@ -178,8 +179,8 @@ mitmproxy:
 
 ## 👥 作者
 
-- 作者：[Your Name]
-- 邮箱：[your.email@example.com]
+- 作者：[Doppel]
+- 微信：[whoami779]
 
 ## 🙏 致谢
 
