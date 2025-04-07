@@ -10,6 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
+// Redis 客户端
 type RedisClient struct {
 	client *redis.Client
 	ctx    context.Context
@@ -26,6 +27,17 @@ func NewRedisClient(addr string) *RedisClient {
 		client: client,
 		ctx:    context.Background(),
 	}
+}
+
+// Connect 连接到 Redis
+func (rc *RedisClient) Connect() error {
+	// 测试连接
+	_, err := rc.Get("test")
+	if err == redis.Nil {
+		// 键不存在，但连接正常
+		return nil
+	}
+	return err
 }
 
 // Get 从 Redis 获取数据
@@ -47,15 +59,6 @@ func (rc *RedisClient) Publish(channel string, message []byte) error {
 func (rc *RedisClient) Subscribe(channel string) *redis.PubSub {
 	return rc.client.Subscribe(rc.ctx, channel)
 }
-
-// SaveScanResult 保存扫描结果到 Redis
-// func (rc *RedisClient) SaveScanResult(result *models.ScanResult) error {
-// 	data, err := json.Marshal(result)
-// 	if err != nil {
-// 		return err
-// 	}
-// 	return rc.client.Set(rc.ctx, "scan_result:"+result.ID, data, 0).Err()
-// }
 
 // GetScanResult 从 Redis 获取扫描结果
 func (rc *RedisClient) GetScanResult(id string) (*models.ScanResult, error) {

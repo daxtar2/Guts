@@ -4,19 +4,21 @@ import FilterConfig from '../components/FilterConfig.vue'
 import LogViewer from '../components/LogViewer.vue'
 import TemplateConfig from '../components/TemplateConfig.vue'
 import TemplatesManager from '../components/TemplatesManager.vue'
+import PathFuzzConfig from '../components/PathFuzzConfig.vue'
+import About from '../components/About.vue'
 
 const routes = [
     {
         path: '/',
-        redirect: '/scan/results'
+        redirect: '/scan-results'
     },
     {
-        path: '/scan/results',
+        path: '/scan-results',
         name: 'ScanResults',
         component: ScanResults
     },
     {
-        path: '/config/filter',
+        path: '/filter-config',
         name: 'FilterConfig',
         component: FilterConfig
     },
@@ -26,14 +28,24 @@ const routes = [
         component: LogViewer
     },
     {
-        path: '/config/template',
+        path: '/templates',
+        name: 'TemplatesManager',
+        component: TemplatesManager
+    },
+    {
+        path: '/template-config',
         name: 'TemplateConfig',
         component: TemplateConfig
     },
     {
-        path: '/templates',
-        name: 'Templates',
-        component: TemplatesManager
+        path: '/path-fuzz',
+        name: 'PathFuzzConfig',
+        component: PathFuzzConfig
+    },
+    {
+        path: '/about',
+        name: 'About',
+        component: About
     }
 ]
 

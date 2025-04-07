@@ -33,23 +33,6 @@ func newInfoAddon(cfg *models.Config, task *scan.Task, filterSuffix []string) *i
 	}
 }
 
-// Requestheaders 处理请求头
-func (addon *infoAddon) Requestheaders(f *proxy.Flow) {
-	// 输出请求信息
-	// logger.Info("Request Headers",
-	// 	zap.String("host", f.Request.URL.Host),
-	// 	zap.String("url", f.Request.URL.String()),
-	// 	zap.String("method", f.Request.Method),
-	// )
-
-	// for k, v := range f.Request.Header {
-	// 	logger.Info("Header",
-	// 		zap.String("key", k),
-	// 		zap.Strings("value", v),
-	// 	)
-	// }
-}
-
 // Request 处理请求体
 func (addon *infoAddon) Request(f *proxy.Flow) {
 	if len(f.Request.Body) > 0 {
@@ -58,23 +41,6 @@ func (addon *infoAddon) Request(f *proxy.Flow) {
 			zap.String("url", f.Request.URL.String()),
 		)
 	}
-}
-
-// Responseheaders 处理响应头
-func (addon *infoAddon) Responseheaders(f *proxy.Flow) {
-	// 输出响应信息
-	// logger.Info("Response Headers",
-	// 	zap.String("host", f.Request.URL.Host),
-	// 	zap.String("url", f.Request.URL.String()),
-	// 	zap.Int("status", f.Response.StatusCode),
-	// )
-
-	// for k, v := range f.Response.Header {
-	// 	logger.Info("Header",
-	// 		zap.String("key", k),
-	// 		zap.Strings("value", v),
-	// 	)
-	// }
 }
 
 // 判断域名黑白名单
@@ -132,13 +98,7 @@ func (addon *infoAddon) isSuffixAllowed(f *proxy.Flow) bool {
 
 // Response 处理响应体
 func (addon *infoAddon) Response(f *proxy.Flow) {
-	// if len(f.Response.Body) > 0 {
-	// 	logger.Info("Response Body",
-	// 		zap.String("host", f.Request.URL.Host),
-	// 		zap.String("url", f.Request.URL.String()),
-	// 		zap.String("body", string(f.Response.Body)),
-	// 	)
-	// }
+
 	logger.Info("处理响应",
 		zap.String("url", f.Request.URL.String()),
 		zap.String("method", f.Request.Method),
@@ -164,13 +124,6 @@ func (addon *infoAddon) Response(f *proxy.Flow) {
 			zap.String("path", f.Request.URL.Path))
 		return
 	}
-
-	// 添加必要的响应头
-	//f.Response.Header.Set("Connection", "close")
-
-	logger.Info("收到新的响应",
-		zap.String("host", f.Request.URL.Host),
-		zap.String("url", f.Request.URL.String()))
 
 	logger.Info("响应过滤结果",
 		zap.String("host", f.Request.URL.Host),

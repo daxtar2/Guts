@@ -2,14 +2,12 @@ package scan
 
 import (
 	"fmt"
-	"os"
+	"net/url"
 	"path/filepath"
 	"reflect"
-	"runtime"
 	"sync"
 	"time"
 
-	"github.com/daxtar2/Guts/config"
 	"github.com/daxtar2/Guts/pkg/cache"
 	"github.com/daxtar2/Guts/pkg/logger"
 	"github.com/daxtar2/Guts/pkg/models"
@@ -19,88 +17,42 @@ import (
 	"golang.org/x/net/context"
 )
 
+// Task 扫描任务结构体
 type Task struct {
-	MaxPoolsize   int // 最大并发数
-	Wg            *sync.WaitGroup
-	engine        *nuclei.NucleiEngine
-	results       chan *output.ResultEvent
-	templateCache *cache.RedisManager // 使用 RedisManager
-	resultChan    chan *models.ScanResult
-	scanning      sync.Map      // 用于跟踪正在扫描的目标
-	stopChan      chan struct{} // 用于停止扫描
+	MaxPoolsize int // 最大并发数
+	Wg          *sync.WaitGroup
+	engine      *nuclei.NucleiEngine
+	results     chan *output.ResultEvent
+	resultChan  chan *models.ScanResult
+	scanning    sync.Map      // 用于跟踪正在扫描的目标
+	stopChan    chan struct{} // 用于停止扫描
+	config      *models.Config
+	redis       *cache.RedisClient
 }
 
-// 初始化扫描任务
-func NewTask(maxPoolsize int) (*Task, error) {
-	// 设置环境变量禁用nuclei默认模板下载
-	os.Setenv("DISABLE_NUCLEI_TEMPLATES_PUBLIC_DOWNLOAD", "true")
-	os.Setenv("NUCLEI_TEMPLATES_DIR", "")                // 清空默认模板目录
-	os.Setenv("NUCLEI_IGNORE_DEFAULT_TEMPLATES", "true") // 忽略默认模板
+// 创建扫描任务
+func NewTask(config *models.Config) (*Task, error) {
+	// 创建 Redis 管理器
+	redisManager := cache.NewRedisClient(config.Redis.Address)
 
-	// 获取程序运行目录
-	execPath, err := os.Getwd()
-	if err != nil {
-		logger.Error("获取程序运行路径失败", zap.Error(err))
-		return nil, err
-	}
-	logger.Info("当前运行文件：%s", zap.String("path", execPath))
-
-	// 根据操作系统选择合适的基础路径
-	var baseTemplatesPath string
-	if runtime.GOOS == "windows" {
-		// Windows下使用可执行文件所在目录
-		baseTemplatesPath = filepath.Join(execPath, "templates")
-	} else {
-		// macOS/Linux下优先使用当前工作目录
-		baseTemplatesPath = filepath.Join(execPath, "templates")
-	}
-
+	// 获取模板基础路径
+	baseTemplatesPath := "./templates"
 	workflowsPath := filepath.Join(baseTemplatesPath, "workflows")
 
-	logger.Info("使用模板路径",
-		zap.String("templates", baseTemplatesPath),
-		zap.String("workflows", workflowsPath),
-		zap.String("os", runtime.GOOS),
-		zap.Bool("disable_default_templates", os.Getenv("DISABLE_NUCLEI_TEMPLATES_PUBLIC_DOWNLOAD") == "true"))
-
-	// 验证模板目录是否存在
-	if _, err := os.Stat(baseTemplatesPath); os.IsNotExist(err) {
-		logger.Error("模板目录不存在",
-			zap.String("path", baseTemplatesPath),
-			zap.Error(err))
-		return nil, fmt.Errorf("模板目录不存在: %s", baseTemplatesPath)
-	}
-
-	// 输出模板子目录
-	httpDir := filepath.Join(baseTemplatesPath, "http")
-	if _, err := os.Stat(httpDir); err == nil {
-		logger.Info("HTTP模板目录存在", zap.String("path", httpDir))
-	} else {
-		logger.Warn("HTTP模板目录不存在", zap.String("path", httpDir), zap.Error(err))
-	}
-
-	// 创建 Redis 客户端
-	redisManager := cache.NewRedisManager(config.GConfig.Redis.Address)
-
-	// 创建配置包装器
-	configWrapper := cache.NewConfigWrapper(redisManager)
-
-	// 从配置包装器获取模板过滤器配置
-	templateFilters := configWrapper.GetTemplateFilters()
-
-	options := []nuclei.NucleiSDKOptions{
+	// 创建扫描引擎
+	engine, err := nuclei.NewNucleiEngine(
 		nuclei.WithTemplateFilters(nuclei.TemplateFilters{
-			Severity:             templateFilters.Severity,
-			ExcludeSeverities:    templateFilters.ExcludeSeverities,
-			ProtocolTypes:        templateFilters.ProtocolTypes,
-			ExcludeProtocolTypes: templateFilters.ExcludeProtocolTypes,
-			Authors:              templateFilters.Authors,
-			Tags:                 templateFilters.Tags,
-			ExcludeTags:          templateFilters.ExcludeTags,
-			IncludeTags:          templateFilters.IncludeTags,
-			IDs:                  templateFilters.IDs,
-			ExcludeIDs:           templateFilters.ExcludeIDs,
-			TemplateCondition:    templateFilters.TemplateCondition,
+			Severity:             config.TemplateFilter.Severity,
+			ExcludeSeverities:    config.TemplateFilter.ExcludeSeverities,
+			ProtocolTypes:        config.TemplateFilter.ProtocolTypes,
+			ExcludeProtocolTypes: config.TemplateFilter.ExcludeProtocolTypes,
+			Authors:              config.TemplateFilter.Authors,
+			Tags:                 config.TemplateFilter.Tags,
+			ExcludeTags:          config.TemplateFilter.ExcludeTags,
+			IncludeTags:          config.TemplateFilter.IncludeTags,
+			IDs:                  config.TemplateFilter.IDs,
+			ExcludeIDs:           config.TemplateFilter.ExcludeIDs,
+			TemplateCondition:    config.TemplateFilter.TemplateCondition,
 		}),
 		nuclei.DisableUpdateCheck(),
 		nuclei.SignedTemplatesOnly(),
@@ -109,126 +61,136 @@ func NewTask(maxPoolsize int) (*Task, error) {
 			Templates: []string{baseTemplatesPath},
 			Workflows: []string{workflowsPath},
 		}),
-
 		// 从配置中读取扫描速率设置
 		func() nuclei.NucleiSDKOptions {
-			// 获取速率配置
-			rateConfig := config.GConfig.ScanRate
-
-			// 默认速率
+			rateConfig := config.ScanRate
 			globalRate := 30
 			if rateConfig.GlobalRate > 0 {
 				globalRate = rateConfig.GlobalRate
 			}
-
-			// 默认单位是秒
 			rateUnit := time.Second
 			if rateConfig.GlobalRateUnit == "minute" {
 				rateUnit = time.Minute
 			} else if rateConfig.GlobalRateUnit == "hour" {
 				rateUnit = time.Hour
 			}
-
-			logger.Info("使用配置的扫描速率",
-				zap.Int("globalRate", globalRate),
-				zap.String("rateUnit", rateConfig.GlobalRateUnit),
-			)
-
 			return nuclei.WithGlobalRateLimit(globalRate, rateUnit)
 		}(),
-
-		// 从配置中读取并发设置
-		func() nuclei.NucleiSDKOptions {
-			// 获取并发配置
-			concurrencyConfig := config.GConfig.ScanRate
-
-			// 使用配置的值，如果配置为0则使用默认值
-			templateConcurrency := 100
-			if concurrencyConfig.TemplateConcurrency > 0 {
-				templateConcurrency = concurrencyConfig.TemplateConcurrency
-			}
-
-			hostConcurrency := 100
-			if concurrencyConfig.HostConcurrency > 0 {
-				hostConcurrency = concurrencyConfig.HostConcurrency
-			}
-
-			headlessHostConcurrency := 50
-			if concurrencyConfig.HeadlessHostConcurrency > 0 {
-				headlessHostConcurrency = concurrencyConfig.HeadlessHostConcurrency
-			}
-
-			headlessTemplateConcurrency := 50
-			if concurrencyConfig.HeadlessTemplateConcurrency > 0 {
-				headlessTemplateConcurrency = concurrencyConfig.HeadlessTemplateConcurrency
-			}
-
-			javascriptTemplateConcurrency := 50
-			if concurrencyConfig.JavascriptTemplateConcurrency > 0 {
-				javascriptTemplateConcurrency = concurrencyConfig.JavascriptTemplateConcurrency
-			}
-
-			templatePayloadConcurrency := 25
-			if concurrencyConfig.TemplatePayloadConcurrency > 0 {
-				templatePayloadConcurrency = concurrencyConfig.TemplatePayloadConcurrency
-			}
-
-			probeConcurrency := 50
-			if concurrencyConfig.ProbeConcurrency > 0 {
-				probeConcurrency = concurrencyConfig.ProbeConcurrency
-			}
-
-			logger.Info("使用配置的并发设置",
-				zap.Int("templateConcurrency", templateConcurrency),
-				zap.Int("hostConcurrency", hostConcurrency),
-			)
-
-			return nuclei.WithConcurrency(nuclei.Concurrency{
-				TemplateConcurrency:           templateConcurrency,
-				HostConcurrency:               hostConcurrency,
-				HeadlessHostConcurrency:       headlessHostConcurrency,
-				HeadlessTemplateConcurrency:   headlessTemplateConcurrency,
-				JavascriptTemplateConcurrency: javascriptTemplateConcurrency,
-				TemplatePayloadConcurrency:    templatePayloadConcurrency,
-				ProbeConcurrency:              probeConcurrency,
-			})
-		}(),
-	}
-
-	engine, err := nuclei.NewNucleiEngineCtx(context.Background(), options...)
+	)
 	if err != nil {
-		logger.Error("创建nuclei引擎失败", zap.Error(err))
-		return nil, err
+		return nil, fmt.Errorf("创建扫描引擎失败: %v", err)
 	}
 
-	// 创建任务
-	t := &Task{
-		MaxPoolsize:   maxPoolsize,
-		engine:        engine,
-		results:       make(chan *output.ResultEvent, 100),
-		Wg:            &sync.WaitGroup{},
-		templateCache: redisManager,
-		resultChan:    make(chan *models.ScanResult, 100),
-		stopChan:      make(chan struct{}),
+	task := &Task{
+		MaxPoolsize: 10,
+		Wg:          &sync.WaitGroup{},
+		config:      config,
+		engine:      engine,
+		redis:       redisManager,
+		results:     make(chan *output.ResultEvent, 1000),
+		resultChan:  make(chan *models.ScanResult, 1000),
+		stopChan:    make(chan struct{}),
+		scanning:    sync.Map{},
 	}
 
-	// 加载所有模板
-	if err := engine.LoadAllTemplates(); err != nil {
-		engine.Close()
-		logger.Error("加载模板失败", zap.Error(err))
-		return nil, err
+	// 启动结果处理协程
+	go task.processResults()
+
+	return task, nil
+}
+
+// 处理扫描结果
+func (t *Task) processResults() {
+	for result := range t.results {
+		// 创建扫描结果
+		scanResult := &models.ScanResult{
+			ID:          result.TemplateID,
+			Target:      result.Matched,
+			Name:        result.TemplatePath,
+			Severity:    result.Info.SeverityHolder.Severity.String(),
+			Type:        "http",
+			Host:        result.Host,
+			MatchedAt:   result.Matched,
+			Description: result.Info.Description,
+			Tags:        result.Info.Tags.ToSlice(),
+			Reference:   result.Info.Reference.ToSlice(),
+			Timestamp:   time.Now(),
+		}
+
+		// 保存到 Redis
+		if err := t.redis.SaveScanResult(scanResult); err != nil {
+			logger.Error("保存扫描结果到 Redis 失败",
+				zap.String("url", scanResult.Target),
+				zap.Error(err))
+		}
+
+		// 发送结果到通道
+		t.resultChan <- scanResult
+	}
+}
+
+// 扫描目标
+func (t *Task) ScanTarget(target string) error {
+	// 检查是否已停止
+	select {
+	case <-t.stopChan:
+		return fmt.Errorf("扫描已停止")
+	default:
 	}
 
-	// 添加调试日志
-	logger.Info("模板加载完成",
-		zap.Int("templates_count", len(engine.Store().Templates())),
-		zap.Int("workflows_count", len(engine.Store().Workflows())))
+	// 检查是否正在扫描
+	if _, exists := t.scanning.LoadOrStore(target, true); exists {
+		return fmt.Errorf("目标正在扫描中")
+	}
+	defer t.scanning.Delete(target)
 
-	return t, nil
+	// 获取路径 fuzz 配置
+	pathFuzzConfig := t.config.PathFuzz
+	if !pathFuzzConfig.Enabled || len(pathFuzzConfig.Paths) == 0 {
+		// 如果未启用路径 fuzz 或路径列表为空，直接扫描目标
+		return t.engine.ExecuteCallbackWithCtx(context.Background(), func(event *output.ResultEvent) {
+			t.results <- event
+		})
+	}
+
+	// 解析目标 URL
+	targetURL, err := url.Parse(target)
+	if err != nil {
+		return fmt.Errorf("解析目标 URL 失败: %v", err)
+	}
+
+	// 对每个路径进行 fuzz
+	for _, path := range pathFuzzConfig.Paths {
+		// 检查是否已停止
+		select {
+		case <-t.stopChan:
+			return fmt.Errorf("扫描已停止")
+		default:
+		}
+
+		// 构建新的 URL
+		newURL := *targetURL
+		newURL.Path = path
+		newTarget := newURL.String()
+
+		// 执行扫描
+		if err := t.engine.ExecuteCallbackWithCtx(context.Background(), func(event *output.ResultEvent) {
+			t.results <- event
+		}); err != nil {
+			logger.Error("扫描路径失败",
+				zap.String("target", newTarget),
+				zap.Error(err))
+		}
+	}
+
+	return nil
 }
 
 // ScanPassiveResult 执行被动扫描
 func (t *Task) ScanPassiveResult(passiveResult *models.PassiveResult) error {
+	if t == nil {
+		return fmt.Errorf("扫描任务未初始化")
+	}
 
 	err := t.ExecuteScan(passiveResult)
 	if err != nil {
@@ -243,7 +205,7 @@ func (t *Task) NotifyResult(result *models.ScanResult) {
 	select {
 	case t.resultChan <- result:
 		// 保存到 Redis
-		if err := t.templateCache.Client.SaveScanResult(result); err != nil {
+		if err := t.redis.SaveScanResult(result); err != nil {
 			logger.Error("保存扫描结果到 Redis 失败",
 				zap.String("url", result.Target),
 				zap.String("name", result.Name),
@@ -288,7 +250,7 @@ func (t *Task) ExecuteScan(passiveResult *models.PassiveResult) error {
 
 	// 添加调试日志
 	logger.Info("扫描前状态",
-		zap.Int("templates_count", len(t.engine.Store().Templates())),
+		zap.Int("templates_count", len(t.engine.GetTemplates())),
 		zap.String("target", passiveResult.Url))
 
 	// 执行扫描，使用上下文和互斥锁保护执行过程
@@ -429,36 +391,52 @@ func getStringValue(obj interface{}, field string) string {
 	if obj == nil {
 		return ""
 	}
-	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
+
+	value := reflect.ValueOf(obj)
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
 	}
-	f := v.FieldByName(field)
-	if !f.IsValid() {
+
+	if value.Kind() != reflect.Struct {
 		return ""
 	}
-	return f.String()
+
+	fieldValue := value.FieldByName(field)
+	if !fieldValue.IsValid() {
+		return ""
+	}
+
+	return fmt.Sprintf("%v", fieldValue.Interface())
 }
 
 // 添加辅助函数来安全地获取字符串切片
 func getStringSlice(obj interface{}, field string) []string {
 	if obj == nil {
-		return nil
+		return []string{}
 	}
-	v := reflect.ValueOf(obj)
-	if v.Kind() == reflect.Ptr {
-		v = v.Elem()
+
+	value := reflect.ValueOf(obj)
+	if value.Kind() == reflect.Ptr {
+		value = value.Elem()
 	}
-	f := v.FieldByName(field)
-	if !f.IsValid() {
-		return nil
+
+	if value.Kind() != reflect.Struct {
+		return []string{}
 	}
-	if f.Kind() != reflect.Slice {
-		return nil
+
+	fieldValue := value.FieldByName(field)
+	if !fieldValue.IsValid() {
+		return []string{}
 	}
-	result := make([]string, f.Len())
-	for i := 0; i < f.Len(); i++ {
-		result[i] = f.Index(i).String()
+
+	if fieldValue.Kind() != reflect.Slice {
+		return []string{}
 	}
+
+	result := make([]string, fieldValue.Len())
+	for i := 0; i < fieldValue.Len(); i++ {
+		result[i] = fmt.Sprintf("%v", fieldValue.Index(i).Interface())
+	}
+
 	return result
 }

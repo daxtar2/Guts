@@ -16,7 +16,7 @@ import (
 // NewMitmproxy 创建新的代理服务
 func NewMitmproxy() error {
 	// 创建全局扫描任务
-	task, err := scan.NewTask(100)
+	task, err := scan.NewTask(config.GConfig)
 	if err != nil {
 		logger.Error("创建扫描任务失败", zap.Error(err))
 		return fmt.Errorf("创建扫描任务失败: %v", err)

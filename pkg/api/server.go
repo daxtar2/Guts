@@ -103,6 +103,12 @@ func NewServer(redisAddr string) *Server {
 
 		// 获取扫描结果的统计信息
 		api.GET("/scan/stats", server.GetScanStats)
+
+		// 获取路径字典配置
+		api.GET("/config/pathfuzz", server.GetPathFuzzConfig)
+
+		// 更新路径字典配置
+		api.POST("/config/pathfuzz", server.UpdatePathFuzzConfig)
 	}
 	logger.Info("API路由设置完成")
 
@@ -870,6 +876,88 @@ func (s *Server) SearchTemplates(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status": "success",
 		"data":   results,
+	})
+}
+
+// GetPathFuzzConfig 获取路径字典配置
+func (s *Server) GetPathFuzzConfig(c *gin.Context) {
+	logger.Info("收到获取路径字典配置请求")
+
+	config.LoadConfig()
+	// 确保配置已加载
+	if config.GConfig == nil {
+		logger.Error("全局配置为空")
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Configuration not initialized",
+		})
+		return
+	}
+
+	// 构建返回数据
+	responseData := gin.H{
+		"enabled": config.GConfig.PathFuzz.Enabled,
+		"paths":   config.GConfig.PathFuzz.Paths,
+	}
+
+	// 记录详细的配置信息
+	logger.Info("返回路径字典配置",
+		zap.Bool("enabled", responseData["enabled"].(bool)),
+		zap.Any("paths", responseData["paths"]),
+	)
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data":   responseData,
+	})
+}
+
+// UpdatePathFuzzConfig 更新路径字典配置
+func (s *Server) UpdatePathFuzzConfig(c *gin.Context) {
+	logger.Info("收到更新路径字典配置请求")
+
+	// 解析请求体
+	var requestData struct {
+		Enabled bool     `json:"enabled"`
+		Paths   []string `json:"paths"`
+	}
+
+	if err := c.ShouldBindJSON(&requestData); err != nil {
+		logger.Error("解析请求体失败", zap.Error(err))
+		c.JSON(400, gin.H{
+			"status":  "error",
+			"message": "Invalid request body",
+		})
+		return
+	}
+
+	// 记录请求数据
+	logger.Info("更新路径字典配置",
+		zap.Bool("enabled", requestData.Enabled),
+		zap.Any("paths", requestData.Paths))
+
+	// 更新配置
+	config.GConfig.PathFuzz.Enabled = requestData.Enabled
+	config.GConfig.PathFuzz.Paths = requestData.Paths
+
+	// 保存配置
+	if err := config.SavePathFuzzConfigToFile(&config.GConfig.PathFuzz); err != nil {
+		logger.Error("保存配置失败", zap.Error(err))
+		c.JSON(500, gin.H{
+			"status":  "error",
+			"message": "Failed to save configuration",
+		})
+		return
+	}
+
+	logger.Info("路径字典配置已更新")
+
+	c.JSON(200, gin.H{
+		"status": "success",
+		"data": gin.H{
+			"enabled": config.GConfig.PathFuzz.Enabled,
+			"paths":   config.GConfig.PathFuzz.Paths,
+		},
 	})
 }
 

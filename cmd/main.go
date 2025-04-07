@@ -50,7 +50,7 @@ func main() {
 	}()
 
 	// 6. 创建扫描任务
-	scanTask, err := scan.NewTask(100)
+	scanTask, err := scan.NewTask(config.GConfig)
 	if err != nil {
 		logger.Fatal("创建扫描任务失败", zap.Error(err))
 	}

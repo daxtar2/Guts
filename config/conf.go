@@ -114,6 +114,7 @@ func SaveConfigToFile(config *models.Config) error {
 	viper.Set("caconfig", config.CaConfig)
 	viper.Set("redis", config.Redis)
 	viper.Set("templatefilters", config.TemplateFilter)
+	viper.Set("path_fuzz", config.PathFuzz)
 
 	// 写入文件
 	if err := viper.WriteConfig(); err != nil {
@@ -127,6 +128,7 @@ func SaveConfigToFile(config *models.Config) error {
 		zap.Any("caConfig", config.CaConfig),
 		zap.Any("redis", config.Redis),
 		zap.Any("templateFilter", config.TemplateFilter),
+		zap.Any("pathFuzz", config.PathFuzz),
 	)
 
 	return nil
@@ -138,10 +140,13 @@ func GetConfig() *models.Config {
 		return nil
 	}
 	return &models.Config{
-		Mitmproxy: GConfig.Mitmproxy,
-		Redis:     GConfig.Redis,
-		HeaderMap: GConfig.HeaderMap,
-		CaConfig:  GConfig.CaConfig,
+		Mitmproxy:      GConfig.Mitmproxy,
+		Redis:          GConfig.Redis,
+		HeaderMap:      GConfig.HeaderMap,
+		CaConfig:       GConfig.CaConfig,
+		TemplateFilter: GConfig.TemplateFilter,
+		ScanRate:       GConfig.ScanRate,
+		PathFuzz:       GConfig.PathFuzz,
 	}
 }
 
@@ -248,6 +253,28 @@ func SaveScanRateConfigToFile(scanRate *models.ScanRateConfig) error {
 		zap.String("globalRateUnit", scanRate.GlobalRateUnit),
 		zap.Int("templateConcurrency", scanRate.TemplateConcurrency),
 		zap.Int("hostConcurrency", scanRate.HostConcurrency),
+	)
+
+	return nil
+}
+
+// SavePathFuzzConfigToFile 保存路径字典配置到文件
+func SavePathFuzzConfigToFile(pathFuzz *models.PathFuzzConfig) error {
+	// 更新内存中的配置
+	GConfig.PathFuzz = *pathFuzz
+
+	// 将配置写入viper
+	viper.Set("path_fuzz", GConfig.PathFuzz)
+
+	// 写入文件
+	if err := viper.WriteConfig(); err != nil {
+		return fmt.Errorf("保存路径字典配置到文件失败: %v", err)
+	}
+
+	// 记录保存的配置
+	logger.Info("路径字典配置已保存到文件",
+		zap.Bool("enabled", pathFuzz.Enabled),
+		zap.Any("paths", pathFuzz.Paths),
 	)
 
 	return nil

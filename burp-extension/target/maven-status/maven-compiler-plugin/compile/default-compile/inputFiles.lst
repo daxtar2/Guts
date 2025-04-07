@@ -1,8 +1,11 @@
+/Users/moonshot/code/Guts/burp-extension/src/main/java/burp/FilterConfigPanel.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/LogEntry.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/Config.java
+/Users/moonshot/code/Guts/burp-extension/src/main/java/burp/TemplateConfigPanel.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/BurpExtender.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/HttpLogTable.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/HttpLogTableModel.java
+/Users/moonshot/code/Guts/burp-extension/src/main/java/burp/ConfigFileManager.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/Utils.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/GUI.java
 /Users/moonshot/code/Guts/burp-extension/src/main/java/burp/GutsClient.java

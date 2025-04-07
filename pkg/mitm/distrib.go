@@ -1,7 +1,6 @@
 package mitm
 
 import (
-	"net/http"
 	"sync"
 	"time"
 
@@ -26,43 +25,22 @@ type Distributor struct {
 }
 
 func distrib(f *proxy.Flow, task *scan.Task) {
-	parseUrl := f.Request.URL
-
-	// 处理域名
-	logger.Info("开始处理目标",
-		zap.String("url", parseUrl.String()),
-		zap.String("host", parseUrl.Host),
-		zap.String("scheme", parseUrl.Scheme),
-		zap.String("method", f.Request.Method))
-
-	// 检查是否已经扫描过该域名
-	if _, exists := scannedHosts.LoadOrStore(parseUrl, true); exists {
-		logger.Info("目标已经扫描过，跳过",
-			zap.String("url", parseUrl.String()))
-		return // 如果已经扫描过，直接返回
+	if task == nil {
+		logger.Error("扫描任务未初始化")
+		return
 	}
 
-	// 记录所有请求头
-	logger.Debug("请求头信息",
-		zap.String("url", parseUrl.String()),
-		zap.Any("headers", f.Request.Header))
-
-	// 构建请求头映射
-	headerMap := make(http.Header)
-	for k, v := range f.Request.Header {
-		headerMap[k] = v
-	}
-
-	// 构建被动扫描结果
+	// 创建扫描输入
 	scanInput := &models.PassiveResult{
-		Url:     parseUrl.String(),
-		Host:    parseUrl.Hostname(),
+		Url:     f.Request.URL.String(),
+		Host:    f.Request.URL.Hostname(),
+		Path:    f.Request.URL.Path,
 		Method:  f.Request.Method,
-		Headers: headerMap,
+		Headers: f.Request.Header,
 		Body:    string(f.Request.Body),
 	}
 
-	logger.Info("创建扫描任务",
+	logger.Info("开始处理目标",
 		zap.String("url", scanInput.Url),
 		zap.String("host", scanInput.Host),
 		zap.String("method", scanInput.Method),

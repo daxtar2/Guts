@@ -2,7 +2,7 @@
 
 <div align="center">
 
-![Guts Logo](static/guts.png)
+![Guts Logo](static/guts2.png)
 
 [![Go Report Card](https://goreportcard.com/badge/github.com/daxtar2/Guts)](https://goreportcard.com/report/github.com/daxtar2/Guts)
 [![License](https://img.shields.io/github/license/daxtar2/Guts)](LICENSE)

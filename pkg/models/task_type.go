@@ -4,13 +4,15 @@ import (
 	"fmt"
 )
 
+// Config 配置结构体
 type Config struct {
-	Mitmproxy      MitmproxyConfig      `mapstructure:"mitmproxy"`
-	Redis          RedisConfig          `mapstructure:"redis"`
-	HeaderMap      HeaderMap            `mapstructure:"headermap"`
-	CaConfig       CaConfig             `mapstructure:"caconfig"`
-	TemplateFilter TemplateFilterConfig `mapstructure:"templatefilters"`
-	ScanRate       ScanRateConfig       `mapstructure:"scanrate"`
+	Mitmproxy      MitmproxyConfig      `mapstructure:"mitmproxy" json:"mitmproxy"`            // mitmproxy配置
+	Redis          RedisConfig          `mapstructure:"redis" json:"redis"`                    // Redis配置
+	HeaderMap      HeaderMap            `mapstructure:"headermap" json:"headerMap"`            // 请求头配置
+	CaConfig       CaConfig             `mapstructure:"caconfig" json:"caConfig"`              // 证书配置
+	TemplateFilter TemplateFilterConfig `mapstructure:"templatefilters" json:"templateFilter"` // 模板过滤配置
+	ScanRate       ScanRateConfig       `mapstructure:"scanrate" json:"scanRate"`              // 扫描速率配置
+	PathFuzz       PathFuzzConfig       `mapstructure:"path_fuzz" json:"pathFuzz"`             // 路径字典配置
 }
 
 type MitmproxyConfig struct {
@@ -65,9 +67,15 @@ type ScanRateConfig struct {
 	ProbeConcurrency              int `mapstructure:"probeconcurrency"`              // 探测并发
 }
 
+// PathFuzzConfig 路径字典配置
+type PathFuzzConfig struct {
+	Enabled bool     `mapstructure:"enabled" json:"enabled"` // 是否启用路径字典
+	Paths   []string `mapstructure:"paths" json:"paths"`     // 路径列表
+}
+
 // LoadConfig 从配置对象本身加载配置
 func (c *Config) LoadConfig() (*Config, error) {
-	if c == nil { // s
+	if c == nil {
 		// 返回默认配置
 		return &Config{
 			Mitmproxy: MitmproxyConfig{
@@ -87,15 +95,39 @@ func (c *Config) LoadConfig() (*Config, error) {
 			CaConfig: CaConfig{
 				CaRootPath: "./certs/",
 			},
+			TemplateFilter: TemplateFilterConfig{
+				Severity:          "critical,high,medium",
+				ExcludeSeverities: "low,info",
+				ProtocolTypes:     "http",
+				Authors:           []string{},
+				Tags:              []string{},
+				ExcludeTags:       []string{},
+				IncludeTags:       []string{},
+				IDs:               []string{},
+				ExcludeIDs:        []string{},
+				TemplateCondition: []string{},
+				EnableCheck:       false,
+			},
+			ScanRate: ScanRateConfig{
+				GlobalRate:     30,
+				GlobalRateUnit: "second",
+			},
+			PathFuzz: PathFuzzConfig{
+				Enabled: false,
+				Paths:   []string{},
+			},
 		}, nil
 	}
 
 	// 返回当前配置的副本
 	return &Config{
-		Mitmproxy: c.Mitmproxy,
-		Redis:     c.Redis,
-		HeaderMap: c.HeaderMap,
-		CaConfig:  c.CaConfig,
+		Mitmproxy:      c.Mitmproxy,
+		Redis:          c.Redis,
+		HeaderMap:      c.HeaderMap,
+		CaConfig:       c.CaConfig,
+		TemplateFilter: c.TemplateFilter,
+		ScanRate:       c.ScanRate,
+		PathFuzz:       c.PathFuzz,
 	}, nil
 }
 
@@ -110,6 +142,9 @@ func (c *Config) SaveConfig(config *Config) error {
 	c.Redis = config.Redis
 	c.HeaderMap = config.HeaderMap
 	c.CaConfig = config.CaConfig
+	c.TemplateFilter = config.TemplateFilter
+	c.ScanRate = config.ScanRate
+	c.PathFuzz = config.PathFuzz
 
 	return nil
 }

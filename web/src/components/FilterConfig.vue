@@ -2,8 +2,8 @@
   <div class="filter-config">
     <h2>流量过滤配置</h2>
     <el-form :model="formState" @submit.prevent="onFinish">
-      <!-- 包含域名 -->
-      <el-form-item label="包含域名">
+      <!-- 白名单 -->
+      <el-form-item label="域名白名单">
         <el-select
           v-model="formState.includeDomain"
           multiple
@@ -15,8 +15,8 @@
         />
       </el-form-item>
 
-      <!-- 排除域名 -->
-      <el-form-item label="排除域名">
+      <!-- 黑名单 -->
+      <el-form-item label="域名黑名单">
         <el-select
           v-model="formState.excludeDomain"
           multiple
