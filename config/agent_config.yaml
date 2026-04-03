@@ -1,0 +1,80 @@
+---
+# Guts Multi-Agent System Configuration
+# 多智能体渗透测试系统配置文件
+
+# ─────────────────────────────────────────
+# LLM 配置（Manager Agent 和动态模板生成使用）
+# ─────────────────────────────────────────
+llm:
+  api_key: ""                    # OpenAI API Key（或兼容接口密钥）
+  base_url: ""                   # 可选：覆盖为 Ollama 等本地端点，如 http://localhost:11434/v1
+  model: "gpt-4o"                # 使用的模型
+
+# ─────────────────────────────────────────
+# Neo4j 图数据库配置（Memory Agent 使用）
+# ─────────────────────────────────────────
+neo4j:
+  uri: "bolt://localhost:7687"
+  username: "neo4j"
+  password: "password"
+  database: "neo4j"
+
+# ─────────────────────────────────────────
+# 智能体运行时配置
+# ─────────────────────────────────────────
+agents:
+  # Manager Agent 配置
+  manager:
+    max_steps: 100               # LangGraph 最大执行步数
+    step_timeout: "30m"          # 单步执行超时
+    reflection_threshold: 3      # 微观修正失败次数触发宏观剪枝的阈值
+
+  # Nuclei Subagent 配置
+  nuclei:
+    binary_path: "nuclei"        # nuclei 二进制路径（需在 PATH 中）
+    templates_path: "./templates" # 模板目录
+    rate_limit: 30               # 默认请求速率（每秒）
+    bulk_size: 10                # 批量大小
+    max_host_errors: 30          # 最大主机错误容忍数
+    sandbox_validation: true     # 是否启用 LLM 生成模板的沙盒预检
+    max_template_iterations: 3   # LLM 模板生成最大迭代次数
+
+  # Recon Subagent 配置
+  recon:
+    passive_enabled: true        # 是否启用被动侦察
+    active_enabled: true         # 是否启用主动侦察
+    wappalyzer_enabled: true     # 是否启用 Wappalyzer 指纹识别
+    dns_timeout: "5s"
+    http_timeout: "10s"
+
+  # Memory Agent 配置
+  memory:
+    event_buffer_size: 256       # 事件总线缓冲区大小
+    context_window: 20           # 上下文检索窗口大小（返回最近 N 条记录）
+
+  # Exploit Subagent 配置
+  exploit:
+    enabled: false               # 默认禁用（需要明确授权）
+    max_depth: 3                 # 最大后渗透深度
+
+  # Analysis Subagent 配置
+  analysis:
+    min_risk_score: 3.0          # 报告纳入的最低风险评分
+    deduplicate: true            # 是否对结果去重
+
+# ─────────────────────────────────────────
+# 事件总线配置
+# ─────────────────────────────────────────
+event_bus:
+  buffer_size: 256               # 事件缓冲区大小
+
+# ─────────────────────────────────────────
+# 可观测性配置（Phase 3 实现）
+# ─────────────────────────────────────────
+observability:
+  prometheus:
+    enabled: false
+    port: 9090
+  tracing:
+    enabled: false
+    endpoint: "http://localhost:14268/api/traces"
